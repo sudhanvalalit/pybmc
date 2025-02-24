@@ -8,4 +8,9 @@ nav:
   - API Reference: api_reference.md
 plugins:
   - search
-  - mkdocstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+  - autorefs
