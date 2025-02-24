@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "pybmc"
+version = "0.1.0"
+description = "A package for Bayesian model combination"
+authors = ["Kyle Godbey <pybmc@ascsn.net>"]
+license = "GPL-3.0"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+numpy = "^1.21.0"
+scipy = "^1.7.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.4"
