@@ -1,0 +1,11 @@
+site_name: "pybmc Documentation"
+site_url: "https://ascsn.github.io/pybmc/"
+theme:
+  name: "material"
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - API Reference: api_reference.md
+plugins:
+  - search
+  - mkdocstrings
