@@ -2,10 +2,10 @@
 
 <div class="grid cards" markdown>
 
-- :material-function-variant: **Bayesian model combination**
-- :material-math-integral: **Statistical inference**
-- :material-chart-bar: **Ensemble modeling**
-- :material-code-array: **Simple Python API**
+- [:material-function-variant: **Bayesian model combination**](usage.md)
+- [:material-math-integral: **Statistical inference**](api_reference.md)
+- [:material-chart-bar: **Ensemble modeling**](usage.md)
+- [:material-code-array: **Simple Python API**](api_reference.md)
 
 </div>
 
