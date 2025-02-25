@@ -1,0 +1,41 @@
+:root {
+  --md-primary-fg-color: #3f51b5;
+  --md-primary-fg-color--light: #757de8;
+  --md-primary-fg-color--dark: #002984;
+}
+
+.md-header {
+  box-shadow: 0 0 0.2rem rgba(0,0,0,.1), 0 0.2rem 0.4rem rgba(0,0,0,.2);
+}
+
+.md-main__inner {
+  margin-top: 1.5rem;
+}
+
+.md-typeset h1 {
+  font-weight: bold;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 0.3em;
+}
+
+.md-typeset h2 {
+  font-weight: 600;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.2em;
+}
+
+.md-typeset .admonition {
+  box-shadow: 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12), 0 3px 1px -2px rgba(0,0,0,.2);
+  border-left: 0.2rem solid var(--md-primary-fg-color);
+}
+
+.md-typeset code {
+  background-color: rgba(0,0,0,.05);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+}
+
+.md-typeset pre > code {
+  background-color: transparent;
+  padding: 0;
+}
