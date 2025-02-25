@@ -1,27 +1,82 @@
 # Welcome to pybmc Documentation
 
+<div class="grid cards" markdown>
+
+- :material-function-variant: **Bayesian model combination**
+- :material-math-integral: **Statistical inference**
+- :material-chart-bar: **Ensemble modeling**
+- :material-code-array: **Simple Python API**
+
+</div>
+
 ## Introduction
-The `pybmc` package implements a Bayesian model combination strategy with the following features:
-1. A set of models
-2. Valid on a given domain X
-   - X can be a vector
-3. With a prediction Y
-   - Y(X) can, in principle, be a vector itself (masses, radii, etc)
-4. Optional orthogonalization step
-5. Training, validation, and optional testing sets defined on a subset of X
-   - It's also possible that we don't have a full Y(X) vector across each of these sets
-6. A training method that determines model weights given a training set
-7. A prediction method that, given a valid X vector, produces Y with the learned model weights
+
+**pybmc** is a Python package that implements a Bayesian model combination strategy with the following features:
+
+- **Versatile**: Works with any set of models on a given domain
+- **Flexible**: Handles vector inputs and predictions
+- **Powerful**: Includes optional orthogonalization steps
+- **Complete**: Training, validation, and testing functions built-in
+
+<div class="grid" markdown>
+<div markdown>
+
+## Why Bayesian Model Combination?
+
+Bayesian model combination (BMC) provides a principled approach to combining predictions from multiple models. Unlike simple averaging or voting techniques, BMC:
+
+1. Accounts for correlations between models
+2. Assigns optimal weights based on model performance
+3. Provides uncertainty estimates for predictions
+4. Is robust against overfitting
+
+</div>
+<div markdown>
+
+```python
+# Quick example
+from pybmc import BayesianModelCombination, Model
+
+# Create models
+model1 = Model("linear", predictions_train, targets_train)
+model2 = Model("neural", predictions_train, targets_train)
+
+# Set up BMC
+bmc = BayesianModelCombination([model1, model2])
+bmc.train()
+
+# Get combined predictions
+predictions = bmc.predict(new_data)
+```
+
+</div>
+</div>
 
 ## Installation
-To install the package, you can use `poetry`:
 
-```sh
+Install the package using pip:
+
+```bash
+pip install pybmc
+```
+
+Or using poetry:
+
+```bash
 poetry add pybmc
 ```
 
-## Usage
-Here is an example of how to use the package:
+## Features
+
+| Feature | Description |
+| ------- | ----------- |
+| Multiple models | Combine any number of pre-trained models |
+| Custom domains | Works with any input domain X (can be a vector) |
+| Vector predictions | Y(X) can be a vector itself (e.g., masses, radii) |
+| Orthogonalization | Optional step to improve model combination |
+| Flexible datasets | Training, validation, and testing with partial data |
+
+## Usage Example
 
 ```python
 import numpy as np
@@ -57,3 +112,6 @@ predictions = bmc.predict(X)
 # Evaluate the model combination
 evaluation = bmc.evaluate(val_data)
 ```
+
+!!! tip "Getting Started"
+    Check out the [Usage](usage.md) page for more detailed examples and the [API Reference](api_reference.md) for complete documentation.
