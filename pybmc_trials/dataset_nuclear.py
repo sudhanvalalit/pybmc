@@ -140,6 +140,8 @@ class Dataset:
         return result_df
 
     
+
+    # check sci kit learn and sci py for other ML
     def split_data(self, train_size, val_size, test_size):
         """
         Split data into training, validation, and testing sets.

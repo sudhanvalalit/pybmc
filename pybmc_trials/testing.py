@@ -1,22 +1,69 @@
 import pandas as pd
-from dataset_nuclear import Dataset
+from dataset import Dataset
 
 dataset = Dataset()
-data = dataset.load_data()
+file_path = 'data/selected_data.h5'
 
-# Check loaded data
-# print("Loaded Data:", data)
+ds = Dataset(data_source=file_path)
+models_to_load = ["ME2", "PC1", "UNEDF1"]
+data = ds.load_data(models=models_to_load)
 
-# # Check extracted common isotopes
-# common_isotopes = dataset.extract_common_isotopes()
-# print("Common Isotopes:", common_isotopes)
+# LOADING DATA
 
-# # Check train/val/test split
-# train, val, test = dataset.split_data(0.6, 0.2, 0.2)
-# print("Train Data:", train.head())
-# print("Validation Data:", val.head())
-# print("Test Data:", test.head())
+# for model_name, df in data.items():
+#     print(f"{model_name} shape:", df.shape)
+#     print(df.head())
 
-# # Check subset retrieval
-subset = dataset.get_subset(domain_X="even-even", N_range=(2, 20), Z_range=(2, 10))
-print("Subset Data:", subset.head())
+
+# FILTERING DATA
+
+
+# multi
+
+# filtered_multi = ds.get_subset(
+#     data=data["ME2"],
+#     filters={
+#         "multi": lambda row: (row["Z"] % 2 == 0) and (row["N"] % 2 == 0) and (row["BE"] > 1800)
+#     },
+#     apply_to_all_models=True
+# )
+# print(filtered_multi)
+
+
+# callable (lamda)
+
+# filtered = ds.get_subset(
+#     data=data["ME2"],
+#     filters={
+#         "BE": lambda col: col > 1500,
+#         "Z": (70, 90)
+#     }
+# )
+# print(filtered.head())
+
+
+# range condition
+
+# filtered_range = ds.get_subset(
+#     data=data["ME2"],
+#     filters={"Z": (20, 40)}
+# )
+# print(filtered_range.head())
+
+
+# SPLITTING
+
+# model_data = data["ME2"]
+
+# train, val, test = ds.split_data(model_data, train_size=0.7, val_size=0.15, test_size=0.15)
+
+# print("Train size:", len(train))
+# print("Val size:", len(val))
+# print("Test size:", len(test))
+
+
+
+
+
+
+
