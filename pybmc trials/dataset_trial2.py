@@ -114,7 +114,7 @@ class Dataset:
         return common_isotopes_df.to_numpy(), common_isotopes_df # This equal to df.values - extract numpy array out from our dataframe
 
     
-    def selected_models_data_sets_extraction(self, models_data_sets=None, models_selected=None, property=None):
+    def selected_models_data_sets_extraction(self, initial_NZ_df=None, models_data_sets=None, models_selected=None, property=None):
         """
         Extracts and organizes model predictions for a given nuclear property.
 
@@ -124,22 +124,33 @@ class Dataset:
         """
         models_data_sets = models_data_sets if models_data_sets is not None else self.raw_data_sets
         models_selected = models_selected if models_selected is not None else self.models
-
-        # Extract common isotopes from our dataset and use that to merge all all models together
-        initial_NZ, initial_NZ_df = self.extract_common_isotopes(models_data_sets, models_selected)
-
+        
         if property is None:
-            raise ValueError("Property must be specified.")
+                raise ValueError("Property must be specified.")
+        
+        # This will ensure that if we have a subset of data that we want to extract from all the models then our dataset will work\
+        # with this dataset
+        if initial_NZ_df is not None:
+             selected_models_data_sets_df  = initial_NZ_df.copy()
+        # Otherwise, we will extract dataset that have common isotopes of all models
+        else:
+            # Extract common isotopes from our dataset and use that to merge all all models together
+            initial_NZ, initial_NZ_df = self.extract_common_isotopes(models_data_sets, models_selected)
 
-        selected_models_data_sets_df = initial_NZ_df.copy()  # Start with filtered (N, Z) data
 
-        for model in models_selected:
+            selected_models_data_sets_df = initial_NZ_df.copy()  # Start with filtered (N, Z) data
+
+        for i, model in enumerate(models_selected):
             if property not in models_data_sets[model]:
                 raise KeyError(f"Property '{property}' not found in model '{model}' dataset.")
 
-            model_df = pd.DataFrame(models_data_sets[model], columns=['N', 'Z', property])
-            selected_models_data_sets_df = selected_models_data_sets_df.merge(model_df, on=['N', 'Z'], how='inner', \
-                                                                              suffixes=("", f"_{model}"))
+            # Rename the property column to the model name
+            model_df = pd.DataFrame(models_data_sets[model], columns=['N', 'Z', property]).rename(
+                columns={property: model}  # Rename column to just model name
+            )
+
+            # Merge on N and Z to keep common isotopes
+            selected_models_data_sets_df = selected_models_data_sets_df.merge(model_df, on=['N', 'Z'], how='inner')
 
         return selected_models_data_sets_df
 
@@ -153,10 +164,13 @@ class Dataset:
         :param test_size: Proportion of the data to include in the testing set.
         :return: A tuple containing the training, validation, and testing sets.
         """
-        if not isinstance(splitting_algorithm, ('inside_to_outside', 'random')):
-            raise ValueError("splitting_algorithm must be either 'inside_to_outside' or 'random'.")
+        if not isinstance(subset_data, np.ndarray):
+            print("subset_data must be a numpy array")
+
+        if splitting_algorithm not in ('inside_to_outside', 'random'):
+            raise ValueError("splitting_algorithm must be either 'inside_to_outside' or 'random'")
         
-        # Use the the sub_data after we have sorted using the get_subset method
+        # Use the the subset_data after we have sorted using the get_subset method
         
         
         if splitting_algorithm == 'random':
@@ -187,46 +201,49 @@ class Dataset:
             distance_1 = kwargs['distance_1']
             distance_2 = kwargs['distance_2'] 
 
+            # We will only work with indexes of train, valid, and test data beccause we will only extract data from these indexes
             train_idx, val_idx, test_idx = self.separate_points_distance_allSets(subset_data, stable_isotopes, distance_1, distance_2)
 
-        return train_idx, val_idx, test_idx
+        return np.array(train_idx), np.array(val_idx), np.array(test_idx)
         
 
-    def get_subset(self, models_data_sets = None, models_selected = None, domain_X=None, N_range=None, Z_range=None): 
+    def get_subset(self, combined_data_df, domain_X=None, N_range=None, Z_range=None): 
         """
-        Return a subset of data for a given domain X and/or a range of N and Z.
+        Return a subset of data for a given domain X  and/or a range of N and Z. The input should be a dataframe that contain
+        common isotopes that all models have
 
         :param domain_X: String specifying the domain type ('even-even', 'even-odd', 'odd-even', 'odd-odd').
         :param N_range: Tuple specifying the range of neutron numbers (N_min, N_max).
         :param Z_range: Tuple specifying the range of proton numbers (Z_min, Z_max).
         :return: A DataFrame containing the subset of data.
         """
-        # We should use in here the common isotopes that we extract earlier 
-        combined_data, combined_data_df = self.extract_common_isotopes(models_data_sets, models_selected)
 
         if domain_X:
             if domain_X == 'even-even':
-                subset_data = combined_data[(combined_data['N'] % 2 == 0) & (combined_data['Z'] % 2 == 0)]
+                subset_data_df = combined_data_df[(combined_data_df['N'] % 2 == 0) & (combined_data_df['Z'] % 2 == 0)]
             elif domain_X == 'even-odd':
-                subset_data = combined_data[(combined_data['N'] % 2 == 0) & (combined_data['Z'] % 2 != 0)]
+                subset_data_df = combined_data_df[(combined_data_df['N'] % 2 == 0) & (combined_data_df['Z'] % 2 != 0)]
             elif domain_X == 'odd-even':
-                subset_data = combined_data[(combined_data['N'] % 2 != 0) & (combined_data['Z'] % 2 == 0)]
+                subset_data_df = combined_data_df[(combined_data_df['N'] % 2 != 0) & (combined_data_df['Z'] % 2 == 0)]
             elif domain_X == 'odd-odd':
-                subset_data = combined_data[(combined_data['N'] % 2 != 0) & (combined_data['Z'] % 2 != 0)]
+                subset_data_df = combined_data_df[(combined_data_df['N'] % 2 != 0) & (combined_data_df['Z'] % 2 != 0)]
             else:
                 raise ValueError("Invalid domain_X value. Choose from 'even-even', 'even-odd', 'odd-even', 'odd-odd'.")
         else:
-            subset_data = combined_data
+            subset_data_df = combined_data_df
 
         if N_range:
             N_min, N_max = N_range
-            subset_data = subset_data[(subset_data['N'] >= N_min) & (subset_data['N'] <= N_max)]
+            subset_data_df = subset_data_df[(subset_data_df['N'] >= N_min) & (subset_data_df['N'] <= N_max)]
 
         if Z_range:
             Z_min, Z_max = Z_range
-            subset_data = subset_data[(subset_data['Z'] >= Z_min) & (subset_data['Z'] <= Z_max)]
+            subset_data_df = subset_data_df[(subset_data_df['Z'] >= Z_min) & (subset_data_df['Z'] <= Z_max)]
 
-        return subset_data
+        # This reset the index of the dataframe from the old dataframe
+        subset_data_df.reset_index(drop = True, inplace = True)
+
+        return subset_data_df.to_numpy(), subset_data_df
     
 
 
@@ -286,7 +303,7 @@ class Dataset:
 
         return np.array(train), np.array(test), np.array(train_list_coordinates), np.array(test_list_coordinates)
 
-    def separate_points_distance_allSets(list1, list2, distance1, distance2):
+    def separate_points_distance_allSets(self, list1, list2, distance1, distance2):
         """
         Separates points in list1 into three groups based on their proximity to any point in list2.
 
@@ -328,9 +345,22 @@ class Dataset:
 
         return train_list_coordinates, validation_list_coordinates, test_list_coordinates
     
+uploaded_data = Dataset(data_source= r'C:\Users\congn\OneDrive\Desktop\An Le Materials\ModelOrthogonalization\data\selected_data.h5',models = None,keys = None)
 
+# We have checked that it does extract common isotopes for you
+common_isotopes, common_isotopes_df = uploaded_data.extract_common_isotopes()
 
+# This does give you the subset of data that we will work with
+selected_NZ, selected_NZ_df = uploaded_data.get_subset( common_isotopes_df, domain_X='even-even', N_range=[8, 300], Z_range= [8, 300])
+print('The number of common isotopes are' + str(selected_NZ_df.shape) + 'isotopes')
 
+# We want to check if the get_subset method could handle more than just the dataset of original models
+stable_isotopes_full=np.loadtxt(r"C:\Users\congn\OneDrive\Desktop\An Le Materials\ModelOrthogonalization\Stable-Isotopes.txt")
+stable_isotopes_full_df = pd.DataFrame({ 'N' : stable_isotopes_full[:, 0], 'Z' : stable_isotopes_full[:, 1]  })
+selected_stable_isotopes, selected_stable_isotopes_df = uploaded_data.get_subset(stable_isotopes_full_df,\
+                                                                                  domain_X='even-even', N_range=[8, 300], Z_range= [8, 300])
+print('The number of selected stable isotopes are' + str(selected_stable_isotopes.shape) + 'isotopes')
 
-    
-
+# This check that the code is able to extract dataframe of models 
+selected_models_data_sets_mass_df = uploaded_data.selected_models_data_sets_extraction(initial_NZ_df= selected_NZ_df, property= 'ChRad')
+print(selected_models_data_sets_mass_df)
