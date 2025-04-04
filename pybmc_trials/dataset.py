@@ -21,19 +21,23 @@ class Dataset:
         self.data_source = data_source
         self.data = {}  # Dictionary of model to DataFrame
 
-    def load_data(self, models, keys=None):
+    def load_data(self, models, keys=None, domain_keys=None):
         """
-        Load data for specified models from a file.
+        Load data for specified models from a file and synchronize their domains.
 
         :param models: List of model names (for HDF5 keys or filtering CSV).
         :param keys: List of columns to extract (optional).
-        :return: Dictionary with model names as keys and DataFrames as values.
+        :param domain_keys: List of columns used to define the common domain (ex: ['N', 'Z']).
+        :return: Dictionary with model names as keys and synchronized DataFrames as values.
         """
         if self.data_source is None:
             raise ValueError("Data source must be specified.")
 
         if not os.path.exists(self.data_source):
             raise FileNotFoundError(f"Data source '{self.data_source}' not found.")
+
+        if domain_keys is None:
+            domain_keys = []
 
         data_dict = {}
 
@@ -50,6 +54,18 @@ class Dataset:
 
         else:
             raise ValueError("Unsupported file format. Only .h5 and .csv are supported.")
+
+        if domain_keys:
+            reference_model = models[0]
+            reference_df = data_dict[reference_model]
+            reference_domain = reference_df[domain_keys].drop_duplicates()
+
+            for model in models[1:]:
+                df = data_dict[model]
+                merged = df.merge(reference_domain, on=domain_keys, how='inner')
+                data_dict[model] = merged
+
+            data_dict[reference_model] = reference_df.merge(reference_domain, on=domain_keys, how='inner')
 
         self.data = data_dict
         return data_dict
