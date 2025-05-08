@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from pybmc_trials.dataset import Dataset
+from pybmc.data import Dataset
 
 class TestDataset(unittest.TestCase):
     def setUp(self):

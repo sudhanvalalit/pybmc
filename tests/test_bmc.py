@@ -1,7 +1,10 @@
 import unittest
+from unittest.mock import patch
 import numpy as np
+import pandas as pd
 from pybmc.bmc import BayesianModelCombination
 from pybmc.models import Model
+from pybmc.sampling_utils import coverage, rndm_m_random_calculator
 
 
 class TestBayesianModelCombination(unittest.TestCase):
@@ -31,12 +34,35 @@ class TestBayesianModelCombination(unittest.TestCase):
         # predict method
 
     def test_evaluate(self):
-        data = [1, 2, 3, 4, 5]
-        result = self.bmc.evaluate(data)
-        # Add assertions to check the result of evaluate method
-        self.assertIsNotNone(result)
-        # Add more specific assertions based on the expected behavior of
-        # evaluate method
+        # Create a dummy DataFrame
+        data = {
+            'N': [10, 20, 30],
+            'Z': [20, 30, 40],
+            'model1': [1.0, 2.0, 3.0],
+            'model2': [1.5, 2.5, 3.5],
+            'truth': [1.2, 2.3, 3.1]
+        }
+        df = pd.DataFrame(data)
+
+        # Instantiate the BMC object
+        bmc = BayesianModelCombination(models_truth=['model1', 'model2', 'truth'], selected_models_dataset=df)
+        bmc.models = ['model1', 'model2']  # ensure this is available
+        bmc.samples = np.random.rand(100, 3)  # dummy samples for evaluation
+
+        with patch("pybmc.bmc.rndm_m_random_calculator") as mock_rndm, \
+            patch("pybmc.bmc.coverage") as mock_coverage:
+
+            # Define fake return values for the mocks
+            mock_rndm.return_value = (np.array([0.0, 0.0, 0.0]), [0.1, 0.2, 0.3])
+            mock_coverage.return_value = 0.85
+
+            result = bmc.evaluate(method=["random", "coverage"])
+
+            self.assertIn("random", result)
+            self.assertIn("coverage", result)
+            self.assertEqual(len(result["random"]), 3)
+            self.assertIsInstance(result["coverage"], float)
+
 
     def test_orthogonalize(self):
         data = [1, 2, 3, 4, 5]
