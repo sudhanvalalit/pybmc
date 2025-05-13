@@ -1,6 +1,6 @@
 import numpy as np
 
-def gibbs_sampler(self, y, X, iterations, prior_info):
+def gibbs_sampler(y, X, iterations, prior_info):
     """
     Perform Gibbs sampling for Bayesian linear regression.
 
@@ -44,7 +44,7 @@ def gibbs_sampler(self, y, X, iterations, prior_info):
 
     return np.array(samples)
 
-def USVt_hat_extraction(self, U, S, Vt, components_kept):
+def USVt_hat_extraction(U, S, Vt, components_kept):
     """
     Extract reduced-dimensionality matrices from Singular Value Decomposition (SVD).
 

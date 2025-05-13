@@ -36,10 +36,42 @@ class BayesianModelCombination:
 
         self.selected_models_dataset = selected_models_dataset # Dataset used for Bayesian Model Mixing
         self.models_truth = models_truth # Models and truth values of the BMC dataset
-        self.models = models_truth.remove('truth') # This is just the set of models without experimental data
+        self.models = [m for m in models_truth if m != 'truth'] # This is the set of models without experimental data
         self.weights = weights if weights is not None else None # Weights of the models 
 
+    def orthogonalize(self, data, components_kept):
+        """
+        Perform orthogonalization on the input data using Singular Value Decomposition (SVD).
+        Stores centered truth values, principal components, and related matrices for training.
 
+        :param data: DataFrame containing the training data, with model and 'truth' columns.
+        :param components_kept: Number of principal components to retain (default: 3).
+        """
+        
+        # Extract model predictions and experimental truth
+        model_matrix = data[self.models].values  # shape: (n_points, n_models)
+        truth_vector = data['truth'].values      # shape: (n_points,)
+
+        # Compute mean model prediction for each point
+        mean_prediction = np.mean(model_matrix, axis=1)
+
+        # Center the experimental values and model predictions
+        centered_experiment = truth_vector - mean_prediction
+        centered_models = model_matrix - mean_prediction[:, None]
+
+        # Perform SVD on centered model predictions
+        U, S, Vt = np.linalg.svd(centered_models)
+
+        # Extract reduced SVD components
+        U_hat, S_hat, Vt_hat, Vt_hat_normalized = USVt_hat_extraction(U, S, Vt, components_kept)
+
+        # Save attributes needed for training
+        self.centered_experiment_train = centered_experiment
+        self.U_hat = U_hat
+        self.S_hat = S_hat
+        self.Vt_hat = Vt_hat
+        self.Vt_hat_normalized = Vt_hat_normalized
+        self._predictions_mean_train = mean_prediction
     def train(self, training_options=None):
         """
         Train the model combination using training data and optional training parameters.
@@ -63,7 +95,7 @@ class BayesianModelCombination:
         nu0_chosen = training_options.get('nu0_chosen', 1.0)
         sigma20_chosen = training_options.get('sigma20_chosen', 0.02)
 
-        self.samples = self.gibbs_sampler(self.centered_experiment_train, self.U_hat, iterations, [b_mean_prior, b_mean_cov, nu0_chosen, sigma20_chosen])
+        self.samples = gibbs_sampler(self.centered_experiment_train, self.U_hat, iterations, [b_mean_prior, b_mean_cov, nu0_chosen, sigma20_chosen])
 
     
     def predict(self, X):
@@ -84,7 +116,7 @@ class BayesianModelCombination:
         if isinstance(X, pd.DataFrame):
             X = X.values  
 
-        rndm_m, (lower, median, upper) = self.rndm_m_random_calculator(X, self.samples)
+        rndm_m, (lower, median, upper) = self.rndm_m_random_calculator(X, self.samples, self.Vt_hat)
 
         return rndm_m, (lower, median, upper)
  
@@ -128,45 +160,13 @@ class BayesianModelCombination:
         results = {}
 
         if "random" in method:
-            rndm_m, [lower, median, upper] = self.rndm_m_random_calculator(filtered_predictions, self.samples)
+            rndm_m, [lower, median, upper] = rndm_m_random_calculator(filtered_predictions, self.samples, self.Vt_hat)
             results["random"] = [lower, median, upper]
         if "coverage" in method:
-            results["coverage"] = self._coverage(np.arange(0, 101, 5), rndm_m, df)
+            results["coverage"] = coverage(np.arange(0, 101, 5), rndm_m, df)
 
         return results
 
-    def orthogonalize(self, data, components_kept):
-        """
-        Perform orthogonalization on the input data using Singular Value Decomposition (SVD).
-        Stores centered truth values, principal components, and related matrices for training.
 
-        :param data: DataFrame containing the training data, with model and 'truth' columns.
-        :param components_kept: Number of principal components to retain (default: 3).
-        """
-        
-        # Extract model predictions and experimental truth
-        model_matrix = data[self.models].values  # shape: (n_points, n_models)
-        truth_vector = data['truth'].values      # shape: (n_points,)
-
-        # Compute mean model prediction for each point
-        mean_prediction = np.mean(model_matrix, axis=1)
-
-        # Center the experimental values and model predictions
-        centered_experiment = truth_vector - mean_prediction
-        centered_models = model_matrix - mean_prediction[:, None]
-
-        # Perform SVD on centered model predictions
-        U, S, Vt = np.linalg.svd(centered_models)
-
-        # Extract reduced SVD components
-        U_hat, S_hat, Vt_hat, Vt_hat_normalized = self.USVt_hat_extraction(U, S, Vt, components_kept)
-
-        # Save attributes needed for training
-        self.centered_experiment_train = centered_experiment
-        self.U_hat = U_hat
-        self.S_hat = S_hat
-        self.Vt_hat = Vt_hat
-        self.Vt_hat_normalized = Vt_hat_normalized
-        self._predictions_mean_train = mean_prediction
 
 

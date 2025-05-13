@@ -1,6 +1,6 @@
 import numpy as np
 
-def coverage(self, percentiles, rndm_m, models_output):
+def coverage(percentiles, rndm_m, models_output):
     """
     Calculate the coverage of credible intervals for the model's predictions.
 
@@ -31,40 +31,45 @@ def coverage(self, percentiles, rndm_m, models_output):
 
     return coverage_results
 
-def rndm_m_random_calculator(self, filtered_model_predictions, samples):
-    """
-    Calculate random samples of model predictions and their credible intervals.
 
-    :param filtered_model_predictions: Matrix of filtered model predictions for isotopes.
-    :param samples: Array of sampled parameter sets from the Gibbs sampler.
-    :return: A tuple containing:
-             - rndm_m: Array of random samples of model predictions.
-             - [lower_radius, median_radius, upper_radius]: Percentile-based credible intervals.
-    """
-    np.random.seed(142857)
-    rng = np.random.default_rng()
-    
-    theta_rand_selected = rng.choice(samples, 10000, replace = False)
+def rndm_m_random_calculator(filtered_model_predictions, samples, Vt_hat):
+        """
+        Efficient calculation of random samples of model predictions and their credible intervals.
+        Assumes Gaussian noise with diagonal covariance.
 
-    model_weights_random = []
-    for beta in theta_rand_selected:
-        model_weights_random.append(np.dot(beta[:-1], self.Vt_hat) + np.full(len(self.Vt_hat[0]) , 1/len(self.Vt_hat[0])))
-    model_weights_random = np.array(model_weights_random)
+        :param filtered_model_predictions: Matrix of filtered model predictions for isotopes.
+        :param samples: Array of sampled parameter sets from the Gibbs sampler.
+        :param Vt_hat: Normalized right singular vectors from SVD.
+        :return: A tuple containing:
+                - rndm_m: Array of random samples of model predictions.
+                - [lower_radius, median_radius, upper_radius]: Percentile-based credible intervals.
+        """
+        np.random.seed(142858)
+        rng = np.random.default_rng()
+       
+        theta_rand_selected = rng.choice(samples, 10000, replace=False)
 
-    rndm_m = []
-    for i in range(len(model_weights_random)):
-        yvals_rand_radius= filtered_model_predictions.dot(model_weights_random[i].T)
+        # Extract betas and noise std deviations
+        betas = theta_rand_selected[:, :-1]  # shape: (10000, num_models - 1)
+        noise_stds = theta_rand_selected[:, -1]  # shape: (10000,)
 
-    
-        rndm_m.append(yvals_rand_radius +
-                    np.random.multivariate_normal(np.full(
-                        len(yvals_rand_radius)
-                        ,0), np.diag(1.0 * np.full(len(yvals_rand_radius),1.0 * theta_rand_selected[i][-1]**2 ) ))) 
-    rndm_m = np.array(rndm_m)
+        # Compute model weights: shape (10000, num_models)
+        default_weights = np.full(Vt_hat.shape[1], 1 / Vt_hat.shape[1])
+        model_weights_random = betas @ Vt_hat + default_weights  # broadcasting default_weights
 
-        
-    lower_radius = np.percentile(rndm_m, 2.5, axis = 0)
-    median_radius = np.percentile(rndm_m, 50, axis = 0)
-    upper_radius = np.percentile(rndm_m, 97.5, axis = 0)
+        # Generate noiseless predictions: shape (10000, num_data_points)
+        yvals_rand_radius = model_weights_random @ filtered_model_predictions.T  # dot product
 
-    return rndm_m, [lower_radius, median_radius, upper_radius]
+        # Add Gaussian noise with std = noise_stds (assume diagonal covariance)
+        # We'll use broadcasting: noise_stds[:, None] * standard normal noise
+        noise = rng.standard_normal(yvals_rand_radius.shape) * noise_stds[:, None]
+        rndm_m = yvals_rand_radius + noise
+
+        # Compute credible intervals
+        lower_radius = np.percentile(rndm_m, 2.5, axis=0)
+        median_radius = np.percentile(rndm_m, 50, axis=0)
+        upper_radius = np.percentile(rndm_m, 97.5, axis=0)
+
+        return rndm_m, [lower_radius, median_radius, upper_radius]
+
+

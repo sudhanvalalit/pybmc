@@ -1,3 +1,2 @@
-1. Finish test bmc class
-
+1. Update documentation
 
