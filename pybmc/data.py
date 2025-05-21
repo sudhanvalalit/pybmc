@@ -22,70 +22,82 @@ class Dataset:
         """
         self.data_source = data_source
         self.data = {}  # Dictionary of model to DataFrame
-
+    
     def load_data(self, models, keys=None, domain_keys=None, model_column='model'):
         """
-        Load data for specified models from a file and synchronize their domains.
+        Load data for each property and return a dictionary of synchronized DataFrames.
+        Each DataFrame has columns: domain_keys + one column per model for that property.
 
-        :param models: List of model names (for HDF5 keys or filtering CSV).
-        :param keys: List of columns to extract (optional).
-        :param domain_keys: List of columns used to define the common domain (ex: ['N', 'Z']).
-        :param model_column: Name of the column in the CSV that identifies which model each row belongs to. Only used when loading from a CSV; ignored for HDF5 files.
-        :return: Dictionary with model names as keys and synchronized DataFrames as values.
+        Parameters:
+            models (list): List of model names (for HDF5 keys or filtering CSV).
+            keys (list): List of property names to extract (each will be a key in the output dict).
+            domain_keys (list, optional): List of columns used to define the common domain (default ['N', 'Z']).
+            model_column (str, optional): Name of the column in the CSV that identifies which model each row belongs to.
+                                          Only used for CSV files; ignored for HDF5 files.
+
+        Returns:
+            dict: Dictionary where each key is a property name and each value is a DataFrame with columns:
+                  domain_keys + one column per model for that property.
+                  The DataFrames are synchronized to the intersection of the domains for all models.
+
+        Supports both .h5 and .csv files.
         """
         if self.data_source is None:
             raise ValueError("Data source must be specified.")
-
         if not os.path.exists(self.data_source):
             raise FileNotFoundError(f"Data source '{self.data_source}' not found.")
+        if keys is None:
+            raise ValueError("You must specify which properties to extract via 'keys'.")
 
-        if domain_keys is None:
-            domain_keys = []
+        result = {}
 
-        data_dict = {}
+        for prop in keys:
+            dfs = []
+            skipped_models = []
 
-        if self.data_source.endswith('.h5'):
-            for model in models:
-                df = pd.read_hdf(self.data_source, key=model)
-                data_dict[model] = df[keys] if keys else df
+            if self.data_source.endswith('.h5'):
+                for model in models:
+                    df = pd.read_hdf(self.data_source, key=model)
+                    # Check required columns
+                    missing_cols = [col for col in domain_keys + [prop] if col not in df.columns]
+                    if missing_cols:
+                        print(f"[Skipped] Model '{model}' missing columns {missing_cols} for property '{prop}'.")
+                        skipped_models.append(model)
+                        continue
+                    temp = df[domain_keys + [prop]].copy()
+                    temp.rename(columns={prop: model}, inplace=True) # type: ignore
+                    dfs.append(temp)
+            elif self.data_source.endswith('.csv'):
+                df = pd.read_csv(self.data_source)
+                for model in models:
+                    if model_column not in df.columns:
+                        raise ValueError(f"Expected column '{model_column}' not found in CSV.")
+                    model_df = df[df[model_column] == model]
+                    missing_cols = [col for col in domain_keys + [prop] if col not in model_df.columns]
+                    if missing_cols:
+                        print(f"[Skipped] Model '{model}' missing columns {missing_cols} for key '{prop}'.")
+                        skipped_models.append(model)
+                        continue
+                    temp = model_df[domain_keys + [prop]].copy()
+                    temp.rename(columns={prop: model}, inplace=True)
+                    dfs.append(temp)
+            else:
+                raise ValueError("Unsupported file format. Only .h5 and .csv are supported.")
 
-        elif self.data_source.endswith('.csv'):
-            df = pd.read_csv(self.data_source)
-            for model in models:
-                if model_column not in df.columns:
-                    raise ValueError(f"Expected column '{model_column}' not found in CSV.")
+            if not dfs:
+                print(f"[Warning] No models with property '{prop}'. Resulting DataFrame will be empty.")
+                result[prop] = pd.DataFrame(columns=domain_keys + [m for m in models if m not in skipped_models])
+                continue
 
-                model_df = df[df[model_column] == model]
-                data_dict[model] = model_df[keys] if keys else model_df
+            # Intersect domain for this property
+            common_df = dfs[0]
+            for other_df in dfs[1:]:
+                common_df = pd.merge(common_df, other_df, on=domain_keys, how='inner')
 
-        else:
-            raise ValueError("Unsupported file format. Only .h5 and .csv are supported.")
-            
-        if domain_keys:
-            # Build the intersection of domains from all models
-            domain_sets = [df[domain_keys].drop_duplicates() for df in data_dict.values()] # Cconstructs a list of DataFrames — one for each model — that only contain the unique domain points
-
-            # Assume domain_sets is a list of DataFrames already prepared
-            common_domain = domain_sets[0]  # Start with the first model's domain
-            for next_df in domain_sets[1:]:
-                common_domain = pd.merge(common_domain, next_df, on=domain_keys, how='inner')
-
-            for model, df in data_dict.items():
-                data_dict[model] = df.merge(common_domain, on=domain_keys, how='inner')
-        
-        if common_domain.empty:
-            print("Warning: No shared domain across models.")
-        self.data = data_dict
-
-        # Combine into single DataFrame with 'model' column 
-        combined = []
-        for model, df in data_dict.items():
-            df_copy = df.copy()
-            df_copy["model"] = model
-            combined.append(df_copy)
-
-        return pd.concat(combined, ignore_index=True)
-
+            result[prop] = common_df
+            self.data = result
+        return result
+    
     def separate_points_distance_allSets(self, list1, list2, distance1, distance2):
             """
             Separates points in list1 into three groups based on their proximity to any point in list2.
@@ -128,25 +140,28 @@ class Dataset:
 
             return train_list_coordinates, validation_list_coordinates, test_list_coordinates
     
-    def split_data(self, data, splitting_algorithm="random", **kwargs):
+    def split_data(self, data_dict, property_name, splitting_algorithm="random", **kwargs):
         """
         Split data into training, validation, and testing sets using random or inside-to-outside logic.
 
-        :param data: DataFrame or ndarray with rows as coordinate points (ex: (x, y) or (N, Z)).
+        :param data_dict: Dictionary output from `load_data`, where keys are property names and values are DataFrames.
+        :param property_name: The key in `data_dict` specifying which DataFrame to use for splitting.
         :param splitting_algorithm: 'random' (default) or 'inside_to_outside'.
         :param kwargs: Additional arguments depending on the chosen algorithm.
             For 'random': train_size, val_size, test_size
             For 'inside_to_outside': stable_points (list of (x, y)), distance1, distance2
-        :return: Tuple of train, validation, test datasets as DataFrames or arrays matching input type.
+        :return: Tuple of train, validation, test datasets as DataFrames.
         """
+        if property_name not in data_dict:
+            raise ValueError(f"Property '{property_name}' not found in the provided data dictionary.")
+
+        data = data_dict[property_name]
+
         if isinstance(data, pd.DataFrame):
             indexable_data = data.reset_index(drop=True)
             point_list = list(indexable_data.itertuples(index=False, name=None))
-        elif isinstance(data, np.ndarray):
-            indexable_data = pd.DataFrame(data)
-            point_list = [tuple(row) for row in data]
         else:
-            raise TypeError("Input data must be a pandas DataFrame or numpy ndarray.")
+            raise TypeError("Data for the specified property must be a pandas DataFrame.")
 
         if splitting_algorithm == "random":
             required = ['train_size', 'val_size', 'test_size']
@@ -180,59 +195,46 @@ class Dataset:
         else:
             raise ValueError("splitting_algorithm must be either 'random' or 'inside_to_outside'")
 
-        # Extract subsets using index lists
-        train_data = indexable_data.iloc[train_idx].reset_index(drop=True)
-        val_data = indexable_data.iloc[val_idx].reset_index(drop=True)
-        test_data = indexable_data.iloc[test_idx].reset_index(drop=True)
-
-        # Return in same format as input
-        if isinstance(data, np.ndarray):
-            return train_data.to_numpy(), val_data.to_numpy(), test_data.to_numpy()
-        else:
-            return train_data, val_data, test_data
+        train_data = indexable_data.iloc[train_idx]
+        val_data = indexable_data.iloc[val_idx]
+        test_data = indexable_data.iloc[test_idx]
+        
+        return train_data, val_data, test_data
 
 
-    def get_subset(self, filters=None, models_to_filter=None):
+    def get_subset(self, property_name, filters=None, models_to_include=None):
         """
-        Return a DataFrame of filtered data across specified models.
+        Return a filtered, wide-format DataFrame for a given property.
 
-        :param filters: Dictionary of filtering rules.
-                        - key = column name, value = single value, tuple (min, max), list of values, or callable
-                        - special key 'multi' allows row-wise lambda functions
-        :param models_to_filter: List of model names to apply filters to (defaults to all in self.data).
-        :return: Concatenated filtered DataFrame with a 'model' column.
+        :param property_name: Name of the property (e.g., "BE", "ChRad").
+        :param filters: Dictionary of filtering rules applied to the domain columns (e.g., {"Z": (26, 28)}).
+        :param models_to_include: Optional list of model names to retain in the output.
+                                If None, all model columns are retained.
+        :return: Filtered wide-format DataFrame with columns: domain keys + model columns.
         """
-        if filters is None:
-            raise ValueError("Filters must be provided.")
+        if property_name not in self.data:
+            raise ValueError(f"Property '{property_name}' not found in dataset.")
 
-        if models_to_filter is None:
-            models_to_filter = list(self.data.keys())
-        else:
-            missing = [m for m in models_to_filter if m not in self.data]
-            if missing:
-                raise ValueError(f"Models not found in data: {missing}")
+        df = self.data[property_name].copy()
 
-        def apply_filters(df):
-            result = df.copy()
+        # Apply row-level filters (domain-based)
+        if filters:
             for column, condition in filters.items():
                 if column == 'multi' and callable(condition):
-                    result = result[result.apply(condition, axis=1)]
+                    df = df[df.apply(condition, axis=1)]
                 elif callable(condition):
-                    result = result[condition(result[column])]
+                    df = df[condition(df[column])]
                 elif isinstance(condition, tuple) and len(condition) == 2:
-                    result = result[(result[column] >= condition[0]) & (result[column] <= condition[1])]
+                    df = df[(df[column] >= condition[0]) & (df[column] <= condition[1])]
                 elif isinstance(condition, list):
-                    result = result[result[column].isin(condition)]
+                    df = df[df[column].isin(condition)]
                 else:
-                    result = result[result[column] == condition]
-            return result
+                    df = df[df[column] == condition]
 
-        # Apply filters and add a 'model' column 
-        filtered_frames = []
-        for model_name in models_to_filter:
-            df = self.data[model_name].copy()
-            filtered = apply_filters(df)
-            filtered["model"] = model_name
-            filtered_frames.append(filtered)
+        # Optionally restrict to a subset of models
+        if models_to_include is not None:
+            domain_keys = [col for col in ['N', 'Z'] if col in df.columns]
+            allowed_cols = domain_keys + [m for m in models_to_include if m in df.columns]
+            df = df[allowed_cols]
 
-        return pd.concat(filtered_frames, ignore_index=True)
+        return df

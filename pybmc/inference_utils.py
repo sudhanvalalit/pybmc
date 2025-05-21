@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 
 def gibbs_sampler(y, X, iterations, prior_info):
     """
@@ -10,10 +11,10 @@ def gibbs_sampler(y, X, iterations, prior_info):
     :param prior_info: Tuple containing prior information (b_mean_prior, b_mean_cov, nu0, sigma20).
     :return: Array of sampled parameter sets.
     """
+    
     b_mean_prior, b_mean_cov, nu0, sigma20 = prior_info
     b_mean_cov_inv = np.linalg.inv(b_mean_cov)
     n = len(y)
-
     # Precompute matrices
     X_T_X = X.T.dot(X)
     X_T_X_inv = np.linalg.inv(X_T_X)
@@ -43,6 +44,8 @@ def gibbs_sampler(y, X, iterations, prior_info):
         samples.append(np.append(b_current, np.sqrt(sigma2)))
 
     return np.array(samples)
+
+
 
 def USVt_hat_extraction(U, S, Vt, components_kept):
     """

@@ -1,18 +1,19 @@
 import numpy as np
 
-def coverage(percentiles, rndm_m, models_output):
+def coverage(percentiles, rndm_m, models_output, truth_column):
     """
     Calculate the coverage of credible intervals for the model's predictions.
 
     :param percentiles: List of percentiles to evaluate the credible intervals.
     :param rndm_m: Array of random samples of model predictions.
     :param models_output: DataFrame containing the true values under the "truth" column.
+    :param truth_column: Name of the column containing truth values.
     :return: List of coverage percentages for each percentile.
     """
     #  How often the model’s credible intervals actually contain the true value
     data_total = len(rndm_m.T)   # Number of data points
     M_evals = len(rndm_m)        # Number of samples
-    data_true = models_output["truth"].tolist()
+    data_true = models_output[truth_column].tolist()
 
     coverage_results = []
 
@@ -37,7 +38,7 @@ def rndm_m_random_calculator(filtered_model_predictions, samples, Vt_hat):
         Efficient calculation of random samples of model predictions and their credible intervals.
         Assumes Gaussian noise with diagonal covariance.
 
-        :param filtered_model_predictions: Matrix of filtered model predictions for isotopes.
+        :param filtered_model_predictions: Matrix of filtered model predictions. BC
         :param samples: Array of sampled parameter sets from the Gibbs sampler.
         :param Vt_hat: Normalized right singular vectors from SVD.
         :return: A tuple containing:
