@@ -5,7 +5,7 @@ def gibbs_sampler(y, X, iterations, prior_info):
     """
     Perform Gibbs sampling for Bayesian linear regression.
 
-    :param y: Response vector (centered if necessary).
+    :param y: Response vector.
     :param X: Design matrix.
     :param iterations: Number of iterations for the Gibbs sampler.
     :param prior_info: Tuple containing prior information (b_mean_prior, b_mean_cov, nu0, sigma20).
@@ -26,26 +26,6 @@ def gibbs_sampler(y, X, iterations, prior_info):
     sigma2 = np.sum(residuals**2) / len(residuals)
 
     samples = []
-
-    for _ in range(iterations):
-        # Sample regression coefficients (b)
-        cov_matrix = np.linalg.inv(X_T_X / sigma2 + b_mean_cov_inv)
-        mean_vector = cov_matrix.dot(b_mean_cov_inv.dot(b_mean_prior) + X.T.dot(y) / sigma2)
-        b_current = np.random.multivariate_normal(mean_vector, cov_matrix)
-
-        # Sample variance (sigma2)
-        supermodel = X.dot(b_current)
-        residuals = y - supermodel
-        shape_post = (nu0 + n) / 2.0
-        scale_post = (nu0 * sigma20 + np.sum(residuals**2)) / 2.0
-        sigma2 = 1 / np.random.default_rng().gamma(shape_post, 1 / scale_post)
-
-        # Append current sample
-        samples.append(np.append(b_current, np.sqrt(sigma2)))
-
-    return np.array(samples)
-
-
 
 def USVt_hat_extraction(U, S, Vt, components_kept):
     """

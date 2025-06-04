@@ -42,6 +42,8 @@ class Dataset:
 
         Supports both .h5 and .csv files.
         """
+        self.domain_keys = domain_keys 
+
         if self.data_source is None:
             raise ValueError("Data source must be specified.")
         if not os.path.exists(self.data_source):
@@ -97,6 +99,59 @@ class Dataset:
             result[prop] = common_df
             self.data = result
         return result
+    
+    def view_data(self, property_name=None, model_name=None):
+        """
+        View data flexibly based on input parameters.
+
+        - No arguments: returns available property names and model names.
+        - property_name only: returns the full DataFrame for that property.
+        - model_name only: Return model values across all properties.
+        - property_name + model_name: returns a Series of values for the model.
+
+        :param property_name: Optional property name 
+        :param model_name: Optional model name 
+        :return: dict, DataFrame, or Series depending on input.
+        """
+
+        if not self.data:
+            raise RuntimeError("No data loaded. Run `load_data(...)` first.")
+
+        if property_name is None and model_name is None:
+            props = list(self.data.keys())
+            models = sorted(set(col for prop_df in self.data.values() for col in prop_df.columns if col not in self.domain_keys))
+
+            return {
+                "available_properties": props,
+                "available_models": models
+            }
+
+        if model_name is not None and property_name is None:
+            # Return a dictionary: {property: Series of model values}
+            result = {}
+            for prop, df in self.data.items():
+                if model_name in df.columns:
+                    cols = self.domain_keys + [model_name]
+                    result[prop] = df[cols]
+                else:
+                    result[prop] = f"[Model '{model_name}' not available]"
+            return result
+
+        if property_name is not None:
+            if property_name not in self.data:
+                raise KeyError(f"Property '{property_name}' not found.")
+
+            df = self.data[property_name]
+
+            if model_name is None:
+                return df  # Full property DataFrame
+
+            if model_name not in df.columns:
+                raise KeyError(f"Model '{model_name}' not found in property '{property_name}'.")
+
+            return df[model_name]
+
+
     
     def separate_points_distance_allSets(self, list1, list2, distance1, distance2):
             """
