@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import os
-from .inference_utils import gibbs_sampler, gibbs_sampler_simplex,  USVt_hat_extraction
+from .inference_utils import gibbs_sampler,  USVt_hat_extraction
 from .sampling_utils import coverage, rndm_m_random_calculator
 
 
