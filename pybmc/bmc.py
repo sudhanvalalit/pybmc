@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as pltimport 
 from sklearn.model_selection import train_test_split
 import os
-from .inference_utils import gibbs_sampler,  USVt_hat_extraction
-from .sampling_utils import coverage, rndm_m_random_calculator
+import sys
+from inference_utils import gibbs_sampler, gibbs_sampler_simplex, USVt_hat_extraction
+from sampling_utils import coverage, rndm_m_random_calculator
 
 
 class BayesianModelCombination:
@@ -92,20 +93,48 @@ class BayesianModelCombination:
             - 'b_mean_cov': (np.ndarray) Prior covariance matrix (default diag(S_hat²))
             - 'nu0_chosen': (float) Degrees of freedom for variance prior (default 1.0)
             - 'sigma20_chosen': (float) Prior variance (default 0.02)
+            - 'sampler': (str) 'Gibbs_sampling' or 'simplex' (default 'Gibbs_sampling')
+            - 'burn': (int) Burn-in iterations for simplex sampler (default 10000)
+            - 'stepsize': (float) Proposal step size for simplex sampler (default 0.001)
         """
-        if training_options is None:
-            training_options = {}
 
-        iterations = training_options.get('iterations', 50000)
-        num_components = self.U_hat.shape[1]
+        # functions defined so that whenever a key not specified, we print out the default value for users
+        def get_option(key, default):
+            if key not in training_options:
+                print(f"[INFO] Using default value for '{key}': {default}")
+            return training_options.get(key, default)
+
+        iterations = get_option('iterations', 50000)
+        sampler = get_option('sampler', 'gibbs_sampling')
+        burn = get_option('burn', 10000)
+        stepsize = get_option('stepsize', 0.001)
+
         S_hat = self.S_hat
+        num_components = self.U_hat.shape[1]
 
-        b_mean_prior = training_options.get('b_mean_prior', np.zeros(num_components))
-        b_mean_cov = training_options.get('b_mean_cov', np.diag(S_hat**2))
-        nu0_chosen = training_options.get('nu0_chosen', 1.0)
-        sigma20_chosen = training_options.get('sigma20_chosen', 0.02)
+        b_mean_prior = get_option('b_mean_prior', np.zeros(num_components))
+        b_mean_cov = get_option('b_mean_cov', np.diag(S_hat**2))
+        nu0_chosen = get_option('nu0_chosen', 1.0)
+        sigma20_chosen = get_option('sigma20_chosen', 0.02)
 
-        self.samples = gibbs_sampler(self.centered_experiment_train, self.U_hat, iterations, [b_mean_prior, b_mean_cov, nu0_chosen, sigma20_chosen])
+        if sampler == 'simplex':
+            self.samples = gibbs_sampler_simplex(
+                self.centered_experiment_train,
+                self.U_hat,
+                self.Vt_hat,
+                self.S_hat,
+                iterations,
+                [nu0_chosen, sigma20_chosen],  # Note: no b_mean_prior/b_mean_cov needed
+                burn = burn,
+                stepsize = stepsize
+            ) 
+        else:
+            self.samples = gibbs_sampler(
+                self.centered_experiment_train,
+                self.U_hat,
+                iterations,
+                [b_mean_prior, b_mean_cov, nu0_chosen, sigma20_chosen]
+            )
 
     
     def predict(self, X):
