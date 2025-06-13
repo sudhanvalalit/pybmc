@@ -199,8 +199,25 @@ class BayesianModelCombination:
         domain_keys = [col for col in df.columns if col not in full_model_cols and col != self.truth_column_name]
 
         # Determine which models are present
-        available_models = [m for m in full_model_cols if m in df.columns]
-        
+        available_models = [m for m in df.columns if m in self.models]
+
+        # Sets
+        trained_models_set = set(self.models)
+        available_models_set = set(available_models)
+
+        missing_models = trained_models_set - available_models_set
+        extra_models = available_models_set - trained_models_set 
+        print(f"Available models: {available_models_set}")
+        print(f"Trained models: {trained_models_set}")
+
+        if len(extra_models) > 0:
+            raise ValueError(f"ERROR: Property '{property}' contains extra models not present during training: {list(extra_models)}. "
+                            "You must retrain if using a larger model space.")
+
+        if len(missing_models) > 0:
+            print(f"WARNING: Predicting on property '{property}' with missing models: {list(missing_models)}")
+            print("         The trained model weights include these models — prediction will proceed, but results may not be statistically accurate.")
+
         if len(available_models) == 0:
             raise ValueError("No available trained models are present in prediction DataFrame.")
 
