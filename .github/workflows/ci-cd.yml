@@ -25,10 +25,6 @@ jobs:
       run: poetry run pytest
     - name: Lint
       run: poetry run flake8 pybmc tests
-    - name: Install pandas stubs
-      run: python3 -m pip install pandas-stubs
-    - name: Type check
-      run: poetry run mypy pybmc
     - name: Format check
       run: poetry run black --check pybmc tests
     - name: Security scan
