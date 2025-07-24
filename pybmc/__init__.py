@@ -11,10 +11,14 @@ Classes:
 from .data import Dataset
 from .bmc import BayesianModelCombination
 from .inference_utils import gibbs_sampler, USVt_hat_extraction
-from .sampling_utils import coverage, rndm_m_random_calculator
+from .sampling_utils import coverage
 
 
 __all__ = [
-    'Model', 'Dataset', 'BayesianModelCombination',
-    'gibbs_sampler', 'USVt_hat_extraction', 'coverage'
+    "Model",
+    "Dataset",
+    "BayesianModelCombination",
+    "gibbs_sampler",
+    "USVt_hat_extraction",
+    "coverage",
 ]
