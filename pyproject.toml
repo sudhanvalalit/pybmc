@@ -4,20 +4,29 @@ version = "0.1.0"
 description = "A package for Bayesian model combination"
 authors = ["Kyle Godbey <pybmc@ascsn.net>"]
 license = "GPL-3.0"
+readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 numpy = "^2.0.0"
 scipy = "^1.15.0"
+pandas = "^2.0.0"
+matplotlib = "^3.7.0"
+scikit-learn = "^1.3.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.3"
 mkdocs-material = "^8.0.0"
-mkdocstrings = "^0.18.0"
+mkdocstrings = {extras = ["python"], version = "^0.18.0"}
 
-[tool.poetry.group.dev.dependencies]
+[tool.poetry.group.ci.dependencies]
 pytest = "^7.0.0"
+flake8 = "^6.0.0"
+mypy = "^1.4.0"
+black = "^23.0.0"
+bandit = "^1.7.0"
+coverage = "^7.0.0"
 
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4", "numpy"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

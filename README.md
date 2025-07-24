@@ -1,4 +1,5 @@
-# pybmc
+# pybmc [![CI Status](https://github.com/ascsn/pybmc/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/ascsn/pybmc/actions/workflows/ci-cd.yml)
+
 Simple package for Bayesian model combination
 
 ## Overview
@@ -15,11 +16,21 @@ This package implements a Bayesian model combination strategy with the following
 7. A prediction method that, given a valid X vector, produces Y with the learned model weights
 
 ## Installation
-To install the package, you can use `poetry`:
 
-```sh
-poetry add pybmc
+### From PyPI (after release)
+```bash
+pip install pybmc
 ```
+
+### From source
+```bash
+git clone https://github.com/ascsn/pybmc.git
+cd pybmc
+poetry install
+```
+
+## Documentation
+Full documentation is available at: [https://ascsn.github.io/pybmc/](https://ascsn.github.io/pybmc/)
 
 ## Usage
 Here is an example of how to use the package:
