@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as pltimport 
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import os
 import sys
-from inference_utils import gibbs_sampler, gibbs_sampler_simplex, USVt_hat_extraction
-from sampling_utils import coverage, rndm_m_random_calculator
+from .inference_utils import gibbs_sampler, gibbs_sampler_simplex, USVt_hat_extraction
+from .sampling_utils import coverage, rndm_m_random_calculator
 
 
 class BayesianModelCombination:
@@ -97,6 +97,9 @@ class BayesianModelCombination:
             - 'burn': (int) Burn-in iterations for simplex sampler (default 10000)
             - 'stepsize': (float) Proposal step size for simplex sampler (default 0.001)
         """
+
+        if training_options is None:
+            training_options = {}
 
         # functions defined so that whenever a key not specified, we print out the default value for users
         def get_option(key, default):
@@ -272,9 +275,3 @@ class BayesianModelCombination:
         rndm_m, (lower, median, upper) = rndm_m_random_calculator(preds, self.samples, self.Vt_hat)
 
         return coverage(np.arange(0, 101, 5), rndm_m, df, truth_column=self.truth_column_name)
-
-
-
-
-
-
