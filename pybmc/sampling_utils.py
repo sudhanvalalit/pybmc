@@ -3,13 +3,16 @@ import numpy as np
 
 def coverage(percentiles, rndm_m, models_output, truth_column):
     """
-    Calculate the coverage of credible intervals for the model's predictions.
-
-    :param percentiles: List of percentiles to evaluate the credible intervals.
-    :param rndm_m: Array of random samples of model predictions.
-    :param models_output: DataFrame containing the true values under the "truth" column.
-    :param truth_column: Name of the column containing truth values.
-    :return: List of coverage percentages for each percentile.
+    Calculates coverage percentages for credible intervals.
+    
+    Args:
+        percentiles (list): Percentiles to evaluate (e.g., [5, 10, ..., 95])
+        rndm_m (np.ndarray): Posterior samples of predictions
+        models_output (pd.DataFrame): DataFrame containing true values
+        truth_column (str): Name of column with true values
+    
+    Returns:
+        list: Coverage percentages for each percentile
     """
     #  How often the model’s credible intervals actually contain the true value
     data_total = len(rndm_m.T)  # Number of data points
@@ -40,15 +43,17 @@ def coverage(percentiles, rndm_m, models_output, truth_column):
 
 def rndm_m_random_calculator(filtered_model_predictions, samples, Vt_hat):
     """
-    Efficient calculation of random samples of model predictions and their credible intervals.
-    Assumes Gaussian noise with diagonal covariance.
-
-    :param filtered_model_predictions: Matrix of filtered model predictions. BC
-    :param samples: Array of sampled parameter sets from the Gibbs sampler.
-    :param Vt_hat: Normalized right singular vectors from SVD.
-    :return: A tuple containing:
-            - rndm_m: Array of random samples of model predictions.
-            - [lower_radius, median_radius, upper_radius]: Percentile-based credible intervals.
+    Generates posterior predictive samples and credible intervals.
+    
+    Args:
+        filtered_model_predictions (np.ndarray): Model predictions
+        samples (np.ndarray): Gibbs samples [beta, sigma]
+        Vt_hat (np.ndarray): Normalized right singular vectors
+    
+    Returns:
+        tuple: 
+            - rndm_m (np.ndarray): Posterior predictive samples
+            - [lower, median, upper] (list): Credible interval arrays
     """
     np.random.seed(142858)
     rng = np.random.default_rng()

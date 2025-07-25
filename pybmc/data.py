@@ -6,17 +6,22 @@ import os
 
 class Dataset:
     """
-    A general-purpose dataset class for loading and managing model data
-    for Bayesian model combination workflows.
-
-    Supports .h5 and .csv files, and provides data splitting functionality.
+    Manages datasets for Bayesian model combination workflows.
+    
+    Supports loading data from HDF5 and CSV files, splitting data, and filtering.
+    
+    Attributes:
+        data_source (str): Path to data file
+        data (dict): Dictionary of loaded data by property
+        domain_keys (list): Domain columns used for data alignment
     """
 
     def __init__(self, data_source=None):
         """
-        Initialize the Dataset object.
-
-        :param data_source: Path to the data file (.h5 or .csv).
+        Initializes the Dataset instance.
+        
+        Args:
+            data_source (str, optional): Path to data file (.h5 or .csv)
         """
         self.data_source = data_source
         self.data = {}  # Dictionary of model to DataFrame
@@ -25,22 +30,28 @@ class Dataset:
         self, models, keys=None, domain_keys=None, model_column="model"
     ):
         """
-        Load data for each property and return a dictionary of synchronized DataFrames.
-        Each DataFrame has columns: domain_keys + one column per model for that property.
-
-        Parameters:
-            models (list): List of model names (for HDF5 keys or filtering CSV).
-            keys (list): List of property names to extract (each will be a key in the output dict).
-            domain_keys (list, optional): List of columns used to define the common domain (default ['N', 'Z']).
-            model_column (str, optional): Name of the column in the CSV that identifies which model each row belongs to.
-                                          Only used for CSV files; ignored for HDF5 files.
-
+        Loads data for multiple properties and models.
+        
+        Args:
+            models (list): Model names to load
+            keys (list): Property names to extract
+            domain_keys (list, optional): Domain columns (default: ['N', 'Z'])
+            model_column (str, optional): CSV column identifying models (default: 'model')
+        
         Returns:
-            dict: Dictionary where each key is a property name and each value is a DataFrame with columns:
-                  domain_keys + one column per model for that property.
-                  The DataFrames are synchronized to the intersection of the domains for all models.
-
-        Supports both .h5 and .csv files.
+            dict: Dictionary of DataFrames keyed by property name
+        
+        Raises:
+            ValueError: If data_source not specified or keys missing
+            FileNotFoundError: If data_source doesn't exist
+        
+        Example:
+            >>> dataset = Dataset('data.h5')
+            >>> data = dataset.load_data(
+                    models=['model1', 'model2'],
+                    keys=['BE', 'Rad'],
+                    domain_keys=['Z', 'N']
+                )
         """
         self.domain_keys = domain_keys
 
@@ -129,16 +140,22 @@ class Dataset:
 
     def view_data(self, property_name=None, model_name=None):
         """
-        View data flexibly based on input parameters.
-
-        - No arguments: returns available property names and model names.
-        - property_name only: returns the full DataFrame for that property.
-        - model_name only: Return model values across all properties.
-        - property_name + model_name: returns a Series of values for the model.
-
-        :param property_name: Optional property name
-        :param model_name: Optional model name
-        :return: dict, DataFrame, or Series depending on input.
+        Provides flexible data viewing options.
+        
+        Args:
+            property_name (str, optional): Specific property to view
+            model_name (str, optional): Specific model to view
+        
+        Returns:
+            Union[dict, pd.DataFrame, pd.Series]: 
+                - If no args: dict of available properties/models
+                - If only model_name: dict of {property: DataFrame}
+                - If only property_name: DataFrame for property
+                - If both: Series of model values for property
+        
+        Raises:
+            RuntimeError: If no data loaded
+            KeyError: If property or model not found
         """
 
         if not self.data:
@@ -188,12 +205,19 @@ class Dataset:
         self, list1, list2, distance1, distance2
     ):
         """
-        Separates points in list1 into three groups based on their proximity to any point in list2.
-
-        :param list1: List of (x, y) tuples.
-        :param list2: List of (x, y) tuples.
-        :param distance: The threshold distance to determine proximity.
-        :return: Two lists - close_points and distant_points.
+        Separates points into groups based on proximity thresholds.
+        
+        Args:
+            list1 (list): Points to classify as (x, y) tuples
+            list2 (list): Reference points as (x, y) tuples
+            distance1 (float): First proximity threshold
+            distance2 (float): Second proximity threshold
+        
+        Returns:
+            tuple: Three lists of indices from list1:
+                - Within distance1 of any point in list2
+                - Within distance2 but not distance1
+                - Beyond distance2
         """
         train = []
         validation = []
@@ -242,15 +266,21 @@ class Dataset:
         self, data_dict, property_name, splitting_algorithm="random", **kwargs
     ):
         """
-        Split data into training, validation, and testing sets using random or inside-to-outside logic.
-
-        :param data_dict: Dictionary output from `load_data`, where keys are property names and values are DataFrames.
-        :param property_name: The key in `data_dict` specifying which DataFrame to use for splitting.
-        :param splitting_algorithm: 'random' (default) or 'inside_to_outside'.
-        :param kwargs: Additional arguments depending on the chosen algorithm.
-            For 'random': train_size, val_size, test_size
-            For 'inside_to_outside': stable_points (list of (x, y)), distance1, distance2
-        :return: Tuple of train, validation, test datasets as DataFrames.
+        Splits data into training, validation, and test sets.
+        
+        Args:
+            data_dict (dict): Output from load_data()
+            property_name (str): Property to use for splitting
+            splitting_algorithm (str): 'random' or 'inside_to_outside'
+            **kwargs: Algorithm-specific parameters:
+                - random: train_size, val_size, test_size
+                - inside_to_outside: stable_points, distance1, distance2
+        
+        Returns:
+            tuple: (train, validation, test) DataFrames
+        
+        Raises:
+            ValueError: For invalid algorithm or missing parameters
         """
         if property_name not in data_dict:
             raise ValueError(
@@ -325,13 +355,18 @@ class Dataset:
 
     def get_subset(self, property_name, filters=None, models_to_include=None):
         """
-        Return a filtered, wide-format DataFrame for a given property.
-
-        :param property_name: Name of the property (e.g., "BE", "ChRad").
-        :param filters: Dictionary of filtering rules applied to the domain columns (e.g., {"Z": (26, 28)}).
-        :param models_to_include: Optional list of model names to retain in the output.
-                                If None, all model columns are retained.
-        :return: Filtered wide-format DataFrame with columns: domain keys + model columns.
+        Returns a filtered subset of data for a property.
+        
+        Args:
+            property_name (str): Property to filter
+            filters (dict, optional): Domain filtering rules
+            models_to_include (list, optional): Models to include
+        
+        Returns:
+            pd.DataFrame: Filtered DataFrame
+        
+        Raises:
+            ValueError: If property not found
         """
         if property_name not in self.data:
             raise ValueError(

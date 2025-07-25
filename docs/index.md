@@ -1,117 +1,82 @@
-# Welcome to pybmc Documentation
+# pyBMC Documentation
 
-<div class="grid cards" markdown>
+Welcome to the official documentation for pyBMC, a Python package for Bayesian Model Combination (BMC) with a focus on nuclear mass predictions.
 
-- [:material-function-variant: **Bayesian model combination**](usage.md)
-- [:material-math-integral: **Statistical inference**](api_reference.md)
-- [:material-chart-bar: **Ensemble modeling**](usage.md)
-- [:material-code-array: **Simple Python API**](api_reference.md)
+## Overview
 
-</div>
+pyBMC provides a comprehensive framework for combining multiple predictive models using Bayesian statistics. Key features include:
 
-## Introduction
+- **Data Management**: Load and preprocess nuclear mass data from HDF5 and CSV files
+- **Orthogonalization**: Transform model predictions using Singular Value Decomposition (SVD)
+- **Bayesian Inference**: Perform Gibbs sampling for model combination
+- **Uncertainty Quantification**: Generate predictions with credible intervals
+- **Model Evaluation**: Calculate coverage statistics for model validation
 
-**pybmc** is a Python package that implements a Bayesian model combination strategy with the following features:
+## Getting Started
 
-- **Versatile**: Works with any set of models on a given domain
-- **Flexible**: Handles vector inputs and predictions
-- **Powerful**: Includes optional orthogonalization steps
-- **Complete**: Training, validation, and testing functions built-in
-
-<div class="grid" markdown>
-<div markdown>
-
-## Why Bayesian Model Combination?
-
-Bayesian model combination (BMC) provides a principled approach to combining predictions from multiple models. Unlike simple averaging or voting techniques, BMC:
-
-1. Accounts for correlations between models
-2. Assigns optimal weights based on model performance
-3. Provides uncertainty estimates for predictions
-4. Is robust against overfitting
-
-</div>
-<div markdown>
-
-```python
-# Quick example
-from pybmc import BayesianModelCombination, Model
-
-# Create models
-model1 = Model("linear", predictions_train, targets_train)
-model2 = Model("neural", predictions_train, targets_train)
-
-# Set up BMC
-bmc = BayesianModelCombination([model1, model2])
-bmc.train()
-
-# Get combined predictions
-predictions = bmc.predict(new_data)
-```
-
-</div>
-</div>
-
-## Installation
-
-Install the package using pip:
+### Installation
 
 ```bash
 pip install pybmc
 ```
 
-Or using poetry:
-
-```bash
-poetry add pybmc
-```
-
-## Features
-
-| Feature | Description |
-| ------- | ----------- |
-| Multiple models | Combine any number of pre-trained models |
-| Custom domains | Works with any input domain X (can be a vector) |
-| Vector predictions | Y(X) can be a vector itself (e.g., masses, radii) |
-| Orthogonalization | Optional step to improve model combination |
-| Flexible datasets | Training, validation, and testing with partial data |
-
-## Usage Example
+### Quick Start
 
 ```python
-import numpy as np
-from pybmc.models import Model
-from pybmc.data import Dataset
-from pybmc.bmc import BayesianModelCombination
+from pybmc import Dataset, BayesianModelCombination
 
-# Create models
-model1 = Model("model1", np.array([1, 2, 3]), np.array([10, 20, 30]))
-model2 = Model("model2", np.array([1, 2, 3]), np.array([15, 25, 35]))
+# Load nuclear mass data
+dataset = Dataset("nuclear_data.h5")
+data_dict = dataset.load_data(
+    models=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
+    keys=["Binding_Energy"],
+    domain_keys=["N", "Z"]
+)
 
-# Load data
-data_source = "path/to/data_source"
-dataset = Dataset(data_source)
-data = dataset.load_data(data_source)
+# Initialize BMC
+bmc = BayesianModelCombination(
+    models_list=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
+    data_dict=data_dict,
+    truth_column_name="Binding_Energy"
+)
 
 # Split data
-train_data, val_data, test_data = dataset.split_data(train_size=0.6, val_size=0.2, test_size=0.2)
+train_df, val_df, test_df = dataset.split_data(
+    data_dict,
+    "Binding_Energy",
+    splitting_algorithm="random",
+    train_size=0.6,
+    val_size=0.2,
+    test_size=0.2
+)
 
-# Create Bayesian model combination
-bmc = BayesianModelCombination(models=[model1, model2], options={'use_orthogonalization': True})
-
-# Orthogonalize models (optional)
-bmc.orthogonalize(train_data)
+# Orthogonalize model predictions
+bmc.orthogonalize("Binding_Energy", train_df, components_kept=3)
 
 # Train the model combination
-bmc.train(train_data)
+bmc.train(training_options={
+    'iterations': 50000,
+    'sampler': 'gibbs_sampling'
+})
 
-# Predict using the model combination
-X = np.array([1, 2, 3])
-predictions = bmc.predict(X)
+# Make predictions
+rndm_m, lower_df, median_df, upper_df = bmc.predict2("Binding_Energy")
 
-# Evaluate the model combination
-evaluation = bmc.evaluate(val_data)
+# Evaluate model performance
+coverage_results = bmc.evaluate()
 ```
 
-!!! tip "Getting Started"
-    Check out the [Usage](usage.md) page for more detailed examples and the [API Reference](api_reference.md) for complete documentation.
+## Documentation Contents
+
+- [Usage Guide](usage.md): Detailed examples and tutorials
+- [API Reference](api_reference.md): Complete documentation of all classes and functions
+- [Theory Background](theory.md): Mathematical foundations of Bayesian model combination
+- [Contributing](CONTRIBUTING.md): How to contribute to pyBMC
+
+## Support
+
+For questions or support, please open an issue on our [GitHub repository](https://github.com/ascsn/pybmc/issues).
+
+## License
+
+This project is licensed under the GPL V3 License - see the [LICENSE](../LICENSE) file for details.

@@ -1,96 +1,134 @@
 # API Reference
 
-## Model Class
-
-### `Model`
-
-A class representing a model with a domain (x) and an output (y).
-
-#### Attributes
-
-- `name` (str): The name of the model.
-- `x` (np.ndarray): The domain of the model.
-- `y` (np.ndarray): The output of the model.
-
-#### Methods
-
-- `__init__(self, name, x, y)`: Initialize the Model object.
-
-  - **Args:**
-    - `name` (str): The name of the model.
-    - `x` (array-like): The domain of the model.
-    - `y` (array-like): The output of the model.
-
-## Dataset Class
+## pybmc.data
 
 ### `Dataset`
+```python
+class Dataset:
+    """
+    Handles loading and preprocessing of nuclear mass data.
 
-A class representing a dataset.
+    Args:
+        data_source (str): Path to data file (HDF5 or CSV)
 
-#### Attributes
+    Methods:
+        load_data(models, keys, domain_keys): Load data for specified models
+        split_data(data_dict, target_key, splitting_algorithm, **kwargs): Split data into train/val/test sets
+    """
+```
 
-- `data` (any): The data of the dataset.
-
-#### Methods
-
-- `__init__(self, data)`: Initialize the Dataset object.
-
-  - **Args:**
-    - `data` (any): The data of the dataset.
-
-- `load_data(self, source)`: Load data from a given source.
-
-  - **Args:**
-    - `source` (str): The source of the data.
-
-- `split_data(self, train_size, val_size, test_size)`: Split data into training, validation, and testing sets.
-
-  - **Args:**
-    - `train_size` (float): The proportion of the data to include in the training set.
-    - `val_size` (float): The proportion of the data to include in the validation set.
-    - `test_size` (float): The proportion of the data to include in the testing set.
-
-- `get_subset(self, domain_X)`: Return a subset of data for a given domain X.
-
-  - **Args:**
-    - `domain_X` (any): The domain for which to return the subset of data.
-
-## BayesianModelCombination Class
+## pybmc.bmc
 
 ### `BayesianModelCombination`
+```python
+class BayesianModelCombination:
+    """
+    Main class for Bayesian Model Combination.
 
-A class representing a Bayesian model combination.
+    Args:
+        models_list (list): List of model names
+        data_dict (dict): Dictionary containing model predictions
+        truth_column_name (str): Name of column containing true values
 
-#### Attributes
+    Methods:
+        orthogonalize(target_key, train_df, components_kept): Perform SVD orthogonalization
+        train(training_options): Train the model combination
+        predict2(target_key): Generate predictions with uncertainty
+        evaluate(): Calculate coverage statistics
+    """
+```
 
-- `models` (list or np.ndarray): The list or array of models.
-- `options` (dict): The options for the model combination.
-- `weights` (any): The weights of the models.
+## pybmc.inference_utils
 
-#### Methods
+### `gibbs_sampler`
+```python
+def gibbs_sampler(y, X, iterations, prior_info):
+    """
+    Performs Gibbs sampling for Bayesian linear regression.
 
-- `__init__(self, models, options=None)`: Initialize the BayesianModelCombination object.
+    Args:
+        y (np.ndarray): Response vector (centered)
+        X (np.ndarray): Design matrix
+        iterations (int): Number of sampling iterations
+        prior_info (tuple): Prior parameters
 
-  - **Args:**
-    - `models` (list or np.ndarray): The list or array of models.
-    - `options` (dict, optional): The options for the model combination. Defaults to None.
+    Returns:
+        np.ndarray: Posterior samples [beta, sigma]
+    """
+```
 
-- `train(self, training_data)`: Train the model combination using training data.
+### `gibbs_sampler_simplex`
+```python
+def gibbs_sampler_simplex(
+    y, X, Vt_hat, S_hat, iterations, prior_info, burn=10000, stepsize=0.001
+):
+    """
+    Performs Gibbs sampling with simplex constraints on model weights.
 
-  - **Args:**
-    - `training_data` (any): The training data.
+    Args:
+        y (np.ndarray): Centered response vector
+        X (np.ndarray): Design matrix of principal components
+        Vt_hat (np.ndarray): Normalized right singular vectors
+        S_hat (np.ndarray): Singular values
+        iterations (int): Number of sampling iterations
+        prior_info (list): [nu0, sigma20] - prior parameters for variance
+        burn (int, optional): Burn-in iterations (default: 10000)
+        stepsize (float, optional): Proposal step size (default: 0.001)
 
-- `predict(self, X)`: Produce predictions using the learned model weights.
+    Returns:
+        np.ndarray: Posterior samples [beta, sigma]
+    """
+```
 
-  - **Args:**
-    - `X` (any): The input data.
+### `USVt_hat_extraction`
+```python
+def USVt_hat_extraction(U, S, Vt, components_kept):
+    """
+    Extracts reduced-dimensionality matrices from SVD results.
 
-- `evaluate(self, data)`: Evaluate the model combination on validation or testing data.
+    Args:
+        U (np.ndarray): Left singular vectors
+        S (np.ndarray): Singular values
+        Vt (np.ndarray): Right singular vectors (transposed)
+        components_kept (int): Number of components to retain
 
-  - **Args:**
-    - `data` (any): The data to evaluate the model combination on.
+    Returns:
+        tuple: (U_hat, S_hat, Vt_hat, Vt_hat_normalized)
+    """
+```
 
-- `orthogonalize(self, data)`: Orthogonalize the models using the given data.
+## pybmc.sampling_utils
 
-  - **Args:**
-    - `data` (any): The data to use for orthogonalization.
+### `coverage`
+```python
+def coverage(percentiles, rndm_m, models_output, truth_column):
+    """
+    Calculates coverage percentages for credible intervals.
+
+    Args:
+        percentiles (list): Percentiles to evaluate
+        rndm_m (np.ndarray): Posterior samples of predictions
+        models_output (pd.DataFrame): DataFrame containing true values
+        truth_column (str): Name of column with true values
+
+    Returns:
+        list: Coverage percentages for each percentile
+    """
+```
+
+### `rndm_m_random_calculator`
+```python
+def rndm_m_random_calculator(filtered_model_predictions, samples, Vt_hat):
+    """
+    Generates posterior predictive samples and credible intervals.
+
+    Args:
+        filtered_model_predictions (np.ndarray): Model predictions
+        samples (np.ndarray): Gibbs samples [beta, sigma]
+        Vt_hat (np.ndarray): Normalized right singular vectors
+
+    Returns:
+        tuple: 
+            - rndm_m (np.ndarray): Posterior predictive samples
+            - [lower, median, upper] (list): Credible interval arrays
+    """

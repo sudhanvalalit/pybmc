@@ -10,23 +10,53 @@ from .sampling_utils import coverage, rndm_m_random_calculator
 
 class BayesianModelCombination:
     """
-    The main idea of this class is to perform BMM on the set of models that we choose
-    from the dataset class. What should this class contain:
-    + Orthogonalization step.
-    + Perform Bayesian inference on the training data that we extract from the Dataset class.
-    + Predictions for certain isotopes.
+    Implements Bayesian Model Combination (BMC) for aggregating predictions from multiple models.
+    
+    This class performs orthogonalization of model predictions, trains the model combination
+    using Gibbs sampling, and provides methods for prediction and evaluation.
+    
+    Args:
+        models_list (list): List of model names to combine
+        data_dict (dict): Dictionary from `load_data()` where keys are property names and values are DataFrames
+        truth_column_name (str): Name of the column containing ground truth values
+        weights (list, optional): Initial weights for models. Defaults to equal weights.
+    
+    Attributes:
+        models_list (list): List of model names
+        data_dict (dict): Loaded data dictionary
+        truth_column_name (str): Ground truth column name
+        weights (list): Current model weights
+        samples (np.ndarray): Posterior samples from Gibbs sampling
+        current_property (str): Current property being processed
+        centered_experiment_train (np.ndarray): Centered experimental values
+        U_hat (np.ndarray): Reduced left singular vectors from SVD
+        Vt_hat (np.ndarray): Normalized right singular vectors
+        S_hat (np.ndarray): Retained singular values
+        Vt_hat_normalized (np.ndarray): Original right singular vectors
+        _predictions_mean_train (np.ndarray): Mean predictions across models
+    
+    Example:
+        >>> bmc = BayesianModelCombination(
+                models_list=["model1", "model2"],
+                data_dict=data,
+                truth_column_name="truth"
+            )
     """
 
     def __init__(
         self, models_list, data_dict, truth_column_name, weights=None
     ):
         """
-        Initialize the BayesianModelCombination class.
-
-        :param models_list: List of model names
-        :param data_dict: Dictionary from `load_data()` where each key is a model name and each value is a DataFrame of properties
-        :param truth_column_name: Name of the column containing the truth values.
-        :param weights: Optional initial weights for the models.
+        Initializes the BMC instance.
+        
+        Args:
+            models_list (list): List of model names to combine
+            data_dict (dict): Dictionary of DataFrames from Dataset.load_data()
+            truth_column_name (str): Name of column containing ground truth values
+            weights (list, optional): Initial model weights. Defaults to None (equal weights)
+        
+        Raises:
+            ValueError: If models_list is not a list of strings or data_dict is invalid
         """
 
         if not isinstance(models_list, list) or not all(
@@ -50,11 +80,18 @@ class BayesianModelCombination:
 
     def orthogonalize(self, property, train_df, components_kept):
         """
-        Perform orthogonalization for the specified property using training data.
-
-        :param property: The nuclear property to orthogonalize on (e.g., 'BE').
-        :param train_index: Training data from split_data
-        :param components_kept: Number of SVD components to retain.
+        Performs orthogonalization of model predictions using SVD.
+        
+        This method centers model predictions, performs SVD decomposition, and retains
+        the specified number of components for subsequent training.
+        
+        Args:
+            property (str): Nuclear property to orthogonalize (e.g., 'BE')
+            train_df (pd.DataFrame): Training data from Dataset.split_data()
+            components_kept (int): Number of SVD components to retain
+        
+        Note:
+            This method must be called before training. Results are stored in instance attributes.
         """
         # Store selected property
         self.current_property = property
@@ -96,18 +133,21 @@ class BayesianModelCombination:
 
     def train(self, training_options=None):
         """
-        Train the model combination using training data and optional training parameters.
-
-        :param training_data: Placeholder (not used).
-        :param training_options: Dictionary of training options. Keys:
-            - 'iterations': (int) Number of Gibbs iterations (default 50000)
-            - 'b_mean_prior': (np.ndarray) Prior mean vector (default zeros)
-            - 'b_mean_cov': (np.ndarray) Prior covariance matrix (default diag(S_hat²))
-            - 'nu0_chosen': (float) Degrees of freedom for variance prior (default 1.0)
-            - 'sigma20_chosen': (float) Prior variance (default 0.02)
-            - 'sampler': (str) 'Gibbs_sampling' or 'simplex' (default 'Gibbs_sampling')
-            - 'burn': (int) Burn-in iterations for simplex sampler (default 10000)
-            - 'stepsize': (float) Proposal step size for simplex sampler (default 0.001)
+        Trains the model combination using Gibbs sampling.
+        
+        Args:
+            training_options (dict, optional): Training configuration. Options:
+                - iterations (int): Number of Gibbs iterations (default: 50000)
+                - sampler (str): 'gibbs_sampling' or 'simplex' (default: 'gibbs_sampling')
+                - burn (int): Burn-in iterations for simplex sampler (default: 10000)
+                - stepsize (float): Proposal step size for simplex sampler (default: 0.001)
+                - b_mean_prior (np.ndarray): Prior mean vector (default: zeros)
+                - b_mean_cov (np.ndarray): Prior covariance matrix (default: diag(S_hat²))
+                - nu0_chosen (float): Degrees of freedom for variance prior (default: 1.0)
+                - sigma20_chosen (float): Prior variance (default: 0.02)
+        
+        Note:
+            Requires prior call to orthogonalize(). Stores posterior samples in self.samples.
         """
 
         if training_options is None:
@@ -156,14 +196,20 @@ class BayesianModelCombination:
 
     def predict(self, X):
         """
-        Predict with full Bayesian posterior sampling, including model weight and data noise.
-
-        :param property: A pandas DataFrame of the property to predict, containing domain columns and model predictions.
-        :return:
-            - rndm_m: array of shape (n_samples, n_points), full posterior draws
-            - lower_df: DataFrame with columns domain_keys + ['Predicted_Lower']
-            - median_df: DataFrame with columns domain_keys + ['Predicted_Median']
-            - upper_df: DataFrame with columns domain_keys + ['Predicted_Upper']
+        Predicts values using the trained model combination with uncertainty quantification.
+        
+        Args:
+            X (pd.DataFrame): Input data containing model predictions and domain information
+        
+        Returns:
+            tuple: Contains:
+                - rndm_m (np.ndarray): Full posterior draws (n_samples, n_points)
+                - lower_df (pd.DataFrame): Lower bounds (2.5th percentile) with domain keys
+                - median_df (pd.DataFrame): Median predictions with domain keys
+                - upper_df (pd.DataFrame): Upper bounds (97.5th percentile) with domain keys
+        
+        Raises:
+            ValueError: If orthogonalize() and train() haven't been called
         """
         if self.samples is None or self.Vt_hat is None:
             raise ValueError(
@@ -199,14 +245,23 @@ class BayesianModelCombination:
 
     def predict2(self, property):
         """
-        Predict a specified property using the model weights learned during training.
-
-        :param property: The property name to predict (e.g., 'ChRad').
-        :return:
-            - rndm_m: array of shape (n_samples, n_points), full posterior draws
-            - lower_df: DataFrame with columns domain_keys + ['Predicted_Lower']
-            - median_df: DataFrame with columns domain_keys + ['Predicted_Median']
-            - upper_df: DataFrame with columns domain_keys + ['Predicted_Upper']
+        Predicts values for a specific property using the trained model combination.
+        
+        This version uses the property name instead of a DataFrame input.
+        
+        Args:
+            property (str): Property name to predict (e.g., 'ChRad')
+        
+        Returns:
+            tuple: Contains:
+                - rndm_m (np.ndarray): Full posterior draws (n_samples, n_points)
+                - lower_df (pd.DataFrame): Lower bounds (2.5th percentile) with domain keys
+                - median_df (pd.DataFrame): Median predictions with domain keys
+                - upper_df (pd.DataFrame): Upper bounds (97.5th percentile) with domain keys
+        
+        Raises:
+            ValueError: If orthogonalize() and train() haven't been called
+            KeyError: If property not found in data_dict
         """
         if self.samples is None or self.Vt_hat is None:
             raise ValueError(
@@ -285,10 +340,14 @@ class BayesianModelCombination:
 
     def evaluate(self, domain_filter=None):
         """
-        Evaluate the model combination using coverage calculation.
-
-        :param domain_filter: dict with optional domain key ranges, e.g., {"Z": (20, 30), "N": (20, 40)}
-        :return: coverage list for each percentile
+        Evaluates model performance using coverage calculation.
+        
+        Args:
+            domain_filter (dict, optional): Filtering rules for domain columns.
+                Example: {"Z": (20, 30), "N": (20, 40)}
+        
+        Returns:
+            list: Coverage percentages for each percentile in [0, 5, 10, ..., 100]
         """
         df = self.data_dict[self.current_property]
 
