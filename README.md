@@ -77,7 +77,7 @@ We welcome contributions! Please see our [Contribution Guidelines](CONTRIBUTING.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL V3 License - see the [LICENSE](LICENSE) file for details.
 
 ## Citation
 
@@ -85,8 +85,8 @@ If you use pyBMC in your research, please cite:
 
 ```bibtex
 @software{pybmc,
-  title = {pyBMC: Bayesian Model Combination for Nuclear Mass Predictions},
-  author = {Your Name and Contributors},
+  title = {pyBMC: Bayesian Model Combination},
+  author = {Kyle Godbey and Troy Dasher and An Le},
   year = {2025},
   publisher = {GitHub},
   journal = {GitHub repository},
