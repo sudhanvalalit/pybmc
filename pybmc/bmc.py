@@ -11,16 +11,16 @@ from .sampling_utils import coverage, rndm_m_random_calculator
 class BayesianModelCombination:
     """
     Implements Bayesian Model Combination (BMC) for aggregating predictions from multiple models.
-    
+
     This class performs orthogonalization of model predictions, trains the model combination
     using Gibbs sampling, and provides methods for prediction and evaluation.
-    
+
     Args:
         models_list (list[str]): List of model names to combine.
         data_dict (dict[str, pandas.DataFrame]): Dictionary from `load_data()` where keys are property names and values are DataFrames.
         truth_column_name (str): Name of the column containing ground truth values.
         weights (list[float], optional): Initial weights for models. Defaults to equal weights.
-    
+
     Attributes:
         models_list (list[str]): List of model names.
         data_dict (dict[str, pandas.DataFrame]): Loaded data dictionary.
@@ -34,7 +34,7 @@ class BayesianModelCombination:
         S_hat (numpy.ndarray): Retained singular values.
         Vt_hat_normalized (numpy.ndarray): Original right singular vectors.
         _predictions_mean_train (numpy.ndarray): Mean predictions across models.
-    
+
     Example:
         >>> bmc = BayesianModelCombination(
                 models_list=["model1", "model2"],
@@ -43,18 +43,16 @@ class BayesianModelCombination:
             )
     """
 
-    def __init__(
-        self, models_list, data_dict, truth_column_name, weights=None
-    ):
+    def __init__(self, models_list, data_dict, truth_column_name, weights=None):
         """
         Initializes the BMC instance.
-        
+
         Args:
             models_list (list[str]): List of model names to combine.
             data_dict (dict[str, pandas.DataFrame]): Dictionary of DataFrames from Dataset.load_data().
             truth_column_name (str): Name of column containing ground truth values.
             weights (list[float], optional): Initial model weights. Defaults to None (equal weights).
-        
+
         Raises:
             ValueError: If `models_list` is not a list of strings or `data_dict` is invalid.
         """
@@ -81,15 +79,15 @@ class BayesianModelCombination:
     def orthogonalize(self, property, train_df, components_kept):
         """
         Performs orthogonalization of model predictions using SVD.
-        
+
         This method centers model predictions, performs SVD decomposition, and retains
         the specified number of components for subsequent training.
-        
+
         Args:
             property (str): Nuclear property to orthogonalize (e.g., 'BE').
             train_df (pandas.DataFrame): Training data from Dataset.split_data().
             components_kept (int): Number of SVD components to retain.
-        
+
         Note:
             This method must be called before training. Results are stored in instance attributes.
         """
@@ -134,7 +132,7 @@ class BayesianModelCombination:
     def train(self, training_options=None):
         """
         Trains the model combination using Gibbs sampling.
-        
+
         Args:
             training_options (dict, optional): Training configuration. Options:
                 - iterations (int): Number of Gibbs iterations (default: 50000).
@@ -145,7 +143,7 @@ class BayesianModelCombination:
                 - b_mean_cov (numpy.ndarray): Prior covariance matrix (default: diag(S_hat²)).
                 - nu0_chosen (float): Degrees of freedom for variance prior (default: 1.0).
                 - sigma20_chosen (float): Prior variance (default: 0.02).
-        
+
         Note:
             Requires prior call to `orthogonalize()`. Stores posterior samples in `self.samples`.
         """
@@ -197,17 +195,17 @@ class BayesianModelCombination:
     def predict(self, X):
         """
         Predicts values using the trained model combination with uncertainty quantification.
-        
+
         Args:
             X (pandas.DataFrame): Input data containing model predictions and domain information.
-        
+
         Returns:
             tuple[numpy.ndarray, pandas.DataFrame, pandas.DataFrame, pandas.DataFrame]: Contains:
                 - rndm_m (numpy.ndarray): Full posterior draws (n_samples, n_points).
                 - lower_df (pandas.DataFrame): Lower bounds (2.5th percentile) with domain keys.
                 - median_df (pandas.DataFrame): Median predictions with domain keys.
                 - upper_df (pandas.DataFrame): Upper bounds (97.5th percentile) with domain keys.
-        
+
         Raises:
             ValueError: If `orthogonalize()` and `train()` haven't been called.
         """
@@ -246,19 +244,19 @@ class BayesianModelCombination:
     def predict2(self, property):
         """
         Predicts values for a specific property using the trained model combination.
-        
+
         This version uses the property name instead of a DataFrame input.
-        
+
         Args:
             property (str): Property name to predict (e.g., 'ChRad').
-        
+
         Returns:
             tuple[numpy.ndarray, pandas.DataFrame, pandas.DataFrame, pandas.DataFrame]: Contains:
                 - rndm_m (numpy.ndarray): Full posterior draws (n_samples, n_points).
                 - lower_df (pandas.DataFrame): Lower bounds (2.5th percentile) with domain keys.
                 - median_df (pandas.DataFrame): Median predictions with domain keys.
                 - upper_df (pandas.DataFrame): Upper bounds (97.5th percentile) with domain keys.
-        
+
         Raises:
             ValueError: If `orthogonalize()` and `train()` haven't been called.
             KeyError: If property not found in `data_dict`.
@@ -341,11 +339,11 @@ class BayesianModelCombination:
     def evaluate(self, domain_filter=None):
         """
         Evaluates model performance using coverage calculation.
-        
+
         Args:
             domain_filter (dict, optional): Filtering rules for domain columns.
                 Example: {"Z": (20, 30), "N": (20, 40)}.
-        
+
         Returns:
             list[float]: Coverage percentages for each percentile in [0, 5, 10, ..., 100].
         """

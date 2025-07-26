@@ -4,7 +4,7 @@ import numpy as np
 def gibbs_sampler(y, X, iterations, prior_info):
     """
     Performs Gibbs sampling for Bayesian linear regression.
-    
+
     Args:
         y (numpy.ndarray): Response vector (centered).
         X (numpy.ndarray): Design matrix.
@@ -14,7 +14,7 @@ def gibbs_sampler(y, X, iterations, prior_info):
             - `b_mean_cov` (numpy.ndarray): Prior covariance matrix.
             - `nu0` (float): Prior degrees of freedom for variance.
             - `sigma20` (float): Prior variance.
-    
+
     Returns:
         numpy.ndarray: Posterior samples `[beta, sigma]`.
     """
@@ -58,7 +58,7 @@ def gibbs_sampler_simplex(
 ):
     """
     Performs Gibbs sampling with simplex constraints on model weights.
-    
+
     Args:
         y (numpy.ndarray): Centered response vector.
         X (numpy.ndarray): Design matrix of principal components.
@@ -68,7 +68,7 @@ def gibbs_sampler_simplex(
         prior_info (list[float]): `[nu0, sigma20]` - prior parameters for variance.
         burn (int, optional): Burn-in iterations (default: 10000).
         stepsize (float, optional): Proposal step size (default: 0.001).
-    
+
     Returns:
         numpy.ndarray: Posterior samples `[beta, sigma]`.
     """
@@ -96,9 +96,7 @@ def gibbs_sampler_simplex(
             log_likelihood_proposed = -np.sum(residuals_proposed**2)
             acceptance_prob = min(
                 1,
-                np.exp(
-                    (log_likelihood_proposed - log_likelihood_current) / sigma2
-                ),
+                np.exp((log_likelihood_proposed - log_likelihood_current) / sigma2),
             )
             if np.random.uniform() < acceptance_prob:
                 b_current = np.copy(b_proposed)
@@ -120,9 +118,7 @@ def gibbs_sampler_simplex(
             log_likelihood_proposed = -np.sum(residuals_proposed**2)
             acceptance_prob = min(
                 1,
-                np.exp(
-                    (log_likelihood_proposed - log_likelihood_current) / sigma2
-                ),
+                np.exp((log_likelihood_proposed - log_likelihood_current) / sigma2),
             )
             if np.random.uniform() < acceptance_prob:
                 b_current = np.copy(b_proposed)
@@ -142,15 +138,15 @@ def gibbs_sampler_simplex(
 def USVt_hat_extraction(U, S, Vt, components_kept):
     """
     Extracts reduced-dimensionality matrices from SVD results.
-    
+
     Args:
         U (numpy.ndarray): Left singular vectors.
         S (numpy.ndarray): Singular values.
         Vt (numpy.ndarray): Right singular vectors (transposed).
         components_kept (int): Number of components to retain.
-    
+
     Returns:
-        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray]: 
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray]:
             - `U_hat` (numpy.ndarray): Reduced left singular vectors.
             - `S_hat` (numpy.ndarray): Retained singular values.
             - `Vt_hat` (numpy.ndarray): Normalized right singular vectors.

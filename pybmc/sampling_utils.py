@@ -4,13 +4,13 @@ import numpy as np
 def coverage(percentiles, rndm_m, models_output, truth_column):
     """
     Calculates coverage percentages for credible intervals.
-    
+
     Args:
         percentiles (list[int]): Percentiles to evaluate (e.g., `[5, 10, ..., 95]`).
         rndm_m (numpy.ndarray): Posterior samples of predictions.
         models_output (pandas.DataFrame): DataFrame containing true values.
         truth_column (str): Name of column with true values.
-    
+
     Returns:
         list[float]: Coverage percentages for each percentile.
     """
@@ -30,11 +30,7 @@ def coverage(percentiles, rndm_m, models_output, truth_column):
             lower_idx = int((0.5 - p / 200) * M_evals)
             upper_idx = int((0.5 + p / 200) * M_evals) - 1
             # Check if the true value y[i] is within this interval
-            if (
-                sorted_evals[lower_idx]
-                <= data_true[i]
-                <= sorted_evals[upper_idx]
-            ):
+            if sorted_evals[lower_idx] <= data_true[i] <= sorted_evals[upper_idx]:
                 count_covered += 1
         coverage_results.append(count_covered / data_total * 100)
 
@@ -44,14 +40,14 @@ def coverage(percentiles, rndm_m, models_output, truth_column):
 def rndm_m_random_calculator(filtered_model_predictions, samples, Vt_hat):
     """
     Generates posterior predictive samples and credible intervals.
-    
+
     Args:
         filtered_model_predictions (numpy.ndarray): Model predictions.
         samples (numpy.ndarray): Gibbs samples `[beta, sigma]`.
         Vt_hat (numpy.ndarray): Normalized right singular vectors.
-    
+
     Returns:
-        tuple[numpy.ndarray, list[numpy.ndarray]]: 
+        tuple[numpy.ndarray, list[numpy.ndarray]]:
             - `rndm_m` (numpy.ndarray): Posterior predictive samples.
             - `[lower, median, upper]` (list[numpy.ndarray]): Credible interval arrays.
     """

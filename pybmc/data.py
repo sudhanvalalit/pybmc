@@ -7,9 +7,9 @@ import os
 class Dataset:
     """
     Manages datasets for Bayesian model combination workflows.
-    
+
     Supports loading data from HDF5 and CSV files, splitting data, and filtering.
-    
+
     Attributes:
         data_source (str): Path to data file.
         data (dict[str, pandas.DataFrame]): Dictionary of loaded data by property.
@@ -19,32 +19,30 @@ class Dataset:
     def __init__(self, data_source=None):
         """
         Initializes the Dataset instance.
-        
+
         Args:
             data_source (str, optional): Path to data file (.h5 or .csv).
         """
         self.data_source = data_source
         self.data = {}  # Dictionary of model to DataFrame
 
-    def load_data(
-        self, models, keys=None, domain_keys=None, model_column="model"
-    ):
+    def load_data(self, models, keys=None, domain_keys=None, model_column="model"):
         """
         Loads data for multiple properties and models.
-        
+
         Args:
             models (list[str]): Model names to load.
             keys (list[str]): Property names to extract.
             domain_keys (list[str], optional): Domain columns (default: ['N', 'Z']).
             model_column (str, optional): CSV column identifying models (default: 'model').
-        
+
         Returns:
             dict[str, pandas.DataFrame]: Dictionary of DataFrames keyed by property name.
-        
+
         Raises:
             ValueError: If `data_source` not specified or `keys` missing.
             FileNotFoundError: If `data_source` doesn't exist.
-        
+
         Example:
             >>> dataset = Dataset('data.h5')
             >>> data = dataset.load_data(
@@ -58,13 +56,9 @@ class Dataset:
         if self.data_source is None:
             raise ValueError("Data source must be specified.")
         if not os.path.exists(self.data_source):
-            raise FileNotFoundError(
-                f"Data source '{self.data_source}' not found."
-            )
+            raise FileNotFoundError(f"Data source '{self.data_source}' not found.")
         if keys is None:
-            raise ValueError(
-                "You must specify which properties to extract via 'keys'."
-            )
+            raise ValueError("You must specify which properties to extract via 'keys'.")
 
         result = {}
 
@@ -77,9 +71,7 @@ class Dataset:
                     df = pd.read_hdf(self.data_source, key=model)
                     # Check required columns
                     missing_cols = [
-                        col
-                        for col in domain_keys + [prop]
-                        if col not in df.columns
+                        col for col in domain_keys + [prop] if col not in df.columns
                     ]
                     if missing_cols:
                         print(
@@ -122,17 +114,14 @@ class Dataset:
                     f"[Warning] No models with property '{prop}'. Resulting DataFrame will be empty."
                 )
                 result[prop] = pd.DataFrame(
-                    columns=domain_keys
-                    + [m for m in models if m not in skipped_models]
+                    columns=domain_keys + [m for m in models if m not in skipped_models]
                 )
                 continue
 
             # Intersect domain for this property
             common_df = dfs[0]
             for other_df in dfs[1:]:
-                common_df = pd.merge(
-                    common_df, other_df, on=domain_keys, how="inner"
-                )
+                common_df = pd.merge(common_df, other_df, on=domain_keys, how="inner")
 
             result[prop] = common_df
             self.data = result
@@ -141,18 +130,18 @@ class Dataset:
     def view_data(self, property_name=None, model_name=None):
         """
         Provides flexible data viewing options.
-        
+
         Args:
             property_name (str, optional): Specific property to view.
             model_name (str, optional): Specific model to view.
-        
+
         Returns:
-            Union[dict[str, Union[pandas.DataFrame, str]], pandas.DataFrame, pandas.Series]: 
+            Union[dict[str, Union[pandas.DataFrame, str]], pandas.DataFrame, pandas.Series]:
                 - If no args: dict of available properties/models.
                 - If only `model_name`: dict of `{property: DataFrame}`.
                 - If only `property_name`: DataFrame for property.
                 - If both: Series of model values for property.
-        
+
         Raises:
             RuntimeError: If no data loaded.
             KeyError: If property or model not found.
@@ -201,18 +190,16 @@ class Dataset:
 
             return df[model_name]
 
-    def separate_points_distance_allSets(
-        self, list1, list2, distance1, distance2
-    ):
+    def separate_points_distance_allSets(self, list1, list2, distance1, distance2):
         """
         Separates points into groups based on proximity thresholds.
-        
+
         Args:
             list1 (list[tuple[float, float]]): Points to classify as (x, y) tuples.
             list2 (list[tuple[float, float]]): Reference points as (x, y) tuples.
             distance1 (float): First proximity threshold.
             distance2 (float): Second proximity threshold.
-        
+
         Returns:
             tuple[list[int], list[int], list[int]]: Three lists of indices from `list1`:
                 - Within `distance1` of any point in `list2`.
@@ -231,10 +218,7 @@ class Dataset:
             point1 = list1[i]
             close = False
             for point2 in list2:
-                if (
-                    np.linalg.norm(np.array(point1) - np.array(point2))
-                    <= distance1
-                ):
+                if np.linalg.norm(np.array(point1) - np.array(point2)) <= distance1:
                     close = True
                     break
             if close:
@@ -243,10 +227,7 @@ class Dataset:
             else:
                 close2 = False
                 for point2 in list2:
-                    if (
-                        np.linalg.norm(np.array(point1) - np.array(point2))
-                        <= distance2
-                    ):
+                    if np.linalg.norm(np.array(point1) - np.array(point2)) <= distance2:
                         close2 = True
                         break
                 if close2:
@@ -267,7 +248,7 @@ class Dataset:
     ):
         """
         Splits data into training, validation, and test sets.
-        
+
         Args:
             data_dict (dict[str, pandas.DataFrame]): Output from `load_data()`.
             property_name (str): Property to use for splitting.
@@ -275,10 +256,10 @@ class Dataset:
             **kwargs: Algorithm-specific parameters:
                 - `random`: `train_size` (float), `val_size` (float), `test_size` (float).
                 - `inside_to_outside`: `stable_points` (list[tuple[float, float]]), `distance1` (float), `distance2` (float).
-        
+
         Returns:
             tuple[pandas.DataFrame, pandas.DataFrame, pandas.DataFrame]: (train, validation, test) DataFrames.
-        
+
         Raises:
             ValueError: For invalid algorithm or missing parameters.
         """
@@ -291,9 +272,7 @@ class Dataset:
 
         if isinstance(data, pd.DataFrame):
             indexable_data = data.reset_index(drop=True)
-            point_list = list(
-                indexable_data.itertuples(index=False, name=None)
-            )
+            point_list = list(indexable_data.itertuples(index=False, name=None))
         else:
             raise TypeError(
                 "Data for the specified property must be a pandas DataFrame."
@@ -302,18 +281,14 @@ class Dataset:
         if splitting_algorithm == "random":
             required = ["train_size", "val_size", "test_size"]
             if not all(k in kwargs for k in required):
-                raise ValueError(
-                    f"Missing required kwargs for 'random': {required}"
-                )
+                raise ValueError(f"Missing required kwargs for 'random': {required}")
 
             train_size = kwargs["train_size"]
             val_size = kwargs["val_size"]
             test_size = kwargs["test_size"]
 
             if not np.isclose(train_size + val_size + test_size, 1.0):
-                raise ValueError(
-                    "train_size + val_size + test_size must equal 1.0"
-                )
+                raise ValueError("train_size + val_size + test_size must equal 1.0")
 
             # Random split using indexes
             train_idx, temp_idx = train_test_split(
@@ -356,22 +331,20 @@ class Dataset:
     def get_subset(self, property_name, filters=None, models_to_include=None):
         """
         Returns a filtered subset of data for a property.
-        
+
         Args:
             property_name (str): Property to filter.
             filters (dict, optional): Domain filtering rules.
             models_to_include (list[str], optional): Models to include.
-        
+
         Returns:
             pandas.DataFrame: Filtered DataFrame.
-        
+
         Raises:
             ValueError: If property not found.
         """
         if property_name not in self.data:
-            raise ValueError(
-                f"Property '{property_name}' not found in dataset."
-            )
+            raise ValueError(f"Property '{property_name}' not found in dataset.")
 
         df = self.data[property_name].copy()
 
@@ -383,10 +356,7 @@ class Dataset:
                 elif callable(condition):
                     df = df[condition(df[column])]
                 elif isinstance(condition, tuple) and len(condition) == 2:
-                    df = df[
-                        (df[column] >= condition[0])
-                        & (df[column] <= condition[1])
-                    ]
+                    df = df[(df[column] >= condition[0]) & (df[column] <= condition[1])]
                 elif isinstance(condition, list):
                     df = df[df[column].isin(condition)]
                 else:
