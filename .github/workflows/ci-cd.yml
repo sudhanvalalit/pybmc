@@ -45,6 +45,11 @@ jobs:
       run: |
         pipx install poetry
         poetry install --with docs
+    - name: Generate Coverage Report
+      run: |
+        poetry run pytest --cov=pybmc --cov-report=html
+        mkdir -p docs/coverage
+        cp -r htmlcov/* docs/coverage/
     - name: Build docs
       run: poetry run mkdocs build
     - name: Deploy to GitHub Pages

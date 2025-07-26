@@ -101,6 +101,7 @@ nav:
   - Theory: theory.md
   - Contributing: contributing.md
   - License: license.md
+  - Coverage Report: coverage/index.html
 
 plugins:
   - search

@@ -25,6 +25,7 @@ class Dataset:
         """
         self.data_source = data_source
         self.data = {}  # Dictionary of model to DataFrame
+        self.domain_keys = ["X1", "X2"]  # Default domain keys
 
     def load_data(self, models, keys=None, domain_keys=None, model_column="model"):
         """

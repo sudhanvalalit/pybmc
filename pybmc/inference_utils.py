@@ -33,9 +33,12 @@ def gibbs_sampler(y, X, iterations, prior_info):
 
     samples = []
 
+    # Initialize sigma2 with a small positive value to avoid division by zero
+    sigma2 = max(sigma2, 1e-6)
+
     for i in range(iterations):
-        # Sample from the conditional posterior of bs given sigma2 and data
-        cov_matrix = np.linalg.inv(X_T_X / sigma2 + b_mean_cov_inv)
+        # Regularize the covariance matrix to ensure it is positive definite
+        cov_matrix = np.linalg.inv(X_T_X / sigma2 + b_mean_cov_inv + np.eye(X_T_X.shape[0]) * 1e-6)
         mean_vector = cov_matrix.dot(
             b_mean_cov_inv.dot(b_mean_prior) + X.T.dot(y) / sigma2
         )
@@ -46,7 +49,7 @@ def gibbs_sampler(y, X, iterations, prior_info):
         residuals = y - supermodel
         shape_post = (nu0 + n) / 2.0
         scale_post = (nu0 * sigma20 + np.sum(residuals**2)) / 2.0
-        sigma2 = 1 / np.random.default_rng().gamma(shape_post, 1 / scale_post)
+        sigma2 = max(1 / np.random.default_rng().gamma(shape_post, 1 / scale_post), 1e-6)
 
         samples.append(np.append(b_current, np.sqrt(sigma2)))
 
@@ -83,6 +86,12 @@ def gibbs_sampler_simplex(
     sigma2 = -log_likelihood_current / len(residuals_current)
     samples = []
     acceptance = 0
+
+    # Validate inputs
+    if burn < 0:
+        raise ValueError("Burn-in iterations must be non-negative.")
+    if stepsize <= 0:
+        raise ValueError("Stepsize must be positive.")
 
     # Burn-in phase
     for i in range(burn):

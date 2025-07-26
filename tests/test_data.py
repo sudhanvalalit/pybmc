@@ -76,6 +76,22 @@ class TestDataset(unittest.TestCase):
             )
         )
 
+    @patch("pybmc.data.os.path.exists", return_value=True)
+    def test_load_data_unsupported_format(self, mock_exists):
+        dataset = Dataset(data_source="fake_path.txt")
+        with self.assertRaises(ValueError) as context:
+            dataset.load_data(models=["modelA"], keys=["target"], domain_keys=["x", "y"])
+        self.assertIn("Unsupported file format", str(context.exception))
+
+    @patch("pybmc.data.os.path.exists", return_value=True)
+    @patch("pybmc.data.pd.read_csv")
+    def test_load_data_missing_columns_csv(self, mock_read_csv, mock_exists):
+        mock_read_csv.return_value = pd.DataFrame({"x": [1, 2], "y": [1, 2]})
+        dataset = Dataset(data_source="fake_path.csv")
+        with self.assertRaises(ValueError) as context:
+            dataset.load_data(models=["modelA"], keys=["target"], domain_keys=["x", "y"], model_column="model")
+        self.assertIn("Expected column 'model' not found in CSV", str(context.exception))
+
     def test_split_data_random(self):
         data_dict = {"target": self.sample_df}
         train, val, test = self.dataset.split_data(
@@ -124,6 +140,35 @@ class TestDataset(unittest.TestCase):
         self.assertTrue(
             all(col in result.columns for col in ["modelA", "modelB"])
         )
+
+    def test_view_data_available_properties_and_models(self):
+        result = self.dataset.view_data()
+        self.assertIn("available_properties", result)
+        self.assertIn("available_models", result)
+
+    def test_view_data_specific_property(self):
+        result = self.dataset.view_data(property_name="target")
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertTrue("modelA" in result.columns)
+
+    def test_separate_points_distance_allSets_edge_cases(self):
+        coords_only = pd.DataFrame({"x": [1, 2], "y": [1, 2]})
+        self.dataset.data = {"target": coords_only}
+
+        # Adjusted test case with clearer distances
+        list1 = [(1, 1), (2, 2)]
+        list2 = [(1.1, 1.1), (3, 3)]
+        distance1 = 0.2
+        distance2 = 1.5
+
+        train, val, test = self.dataset.separate_points_distance_allSets(
+            list1=list1, list2=list2, distance1=distance1, distance2=distance2
+        )
+
+        # Validate the results
+        self.assertEqual(len(train), 1)  # Only (1, 1) should be in train
+        self.assertEqual(len(val), 1)    # Only (2, 2) should be in validation
+        self.assertEqual(len(test), 0)   # No points should be in test
 
 
 if __name__ == "__main__":
