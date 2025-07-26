@@ -11,9 +11,9 @@ class Dataset:
     Supports loading data from HDF5 and CSV files, splitting data, and filtering.
     
     Attributes:
-        data_source (str): Path to data file
-        data (dict): Dictionary of loaded data by property
-        domain_keys (list): Domain columns used for data alignment
+        data_source (str): Path to data file.
+        data (dict[str, pandas.DataFrame]): Dictionary of loaded data by property.
+        domain_keys (list[str]): Domain columns used for data alignment.
     """
 
     def __init__(self, data_source=None):
@@ -21,7 +21,7 @@ class Dataset:
         Initializes the Dataset instance.
         
         Args:
-            data_source (str, optional): Path to data file (.h5 or .csv)
+            data_source (str, optional): Path to data file (.h5 or .csv).
         """
         self.data_source = data_source
         self.data = {}  # Dictionary of model to DataFrame
@@ -33,17 +33,17 @@ class Dataset:
         Loads data for multiple properties and models.
         
         Args:
-            models (list): Model names to load
-            keys (list): Property names to extract
-            domain_keys (list, optional): Domain columns (default: ['N', 'Z'])
-            model_column (str, optional): CSV column identifying models (default: 'model')
+            models (list[str]): Model names to load.
+            keys (list[str]): Property names to extract.
+            domain_keys (list[str], optional): Domain columns (default: ['N', 'Z']).
+            model_column (str, optional): CSV column identifying models (default: 'model').
         
         Returns:
-            dict: Dictionary of DataFrames keyed by property name
+            dict[str, pandas.DataFrame]: Dictionary of DataFrames keyed by property name.
         
         Raises:
-            ValueError: If data_source not specified or keys missing
-            FileNotFoundError: If data_source doesn't exist
+            ValueError: If `data_source` not specified or `keys` missing.
+            FileNotFoundError: If `data_source` doesn't exist.
         
         Example:
             >>> dataset = Dataset('data.h5')
@@ -143,19 +143,19 @@ class Dataset:
         Provides flexible data viewing options.
         
         Args:
-            property_name (str, optional): Specific property to view
-            model_name (str, optional): Specific model to view
+            property_name (str, optional): Specific property to view.
+            model_name (str, optional): Specific model to view.
         
         Returns:
-            Union[dict, pd.DataFrame, pd.Series]: 
-                - If no args: dict of available properties/models
-                - If only model_name: dict of {property: DataFrame}
-                - If only property_name: DataFrame for property
-                - If both: Series of model values for property
+            Union[dict[str, Union[pandas.DataFrame, str]], pandas.DataFrame, pandas.Series]: 
+                - If no args: dict of available properties/models.
+                - If only `model_name`: dict of `{property: DataFrame}`.
+                - If only `property_name`: DataFrame for property.
+                - If both: Series of model values for property.
         
         Raises:
-            RuntimeError: If no data loaded
-            KeyError: If property or model not found
+            RuntimeError: If no data loaded.
+            KeyError: If property or model not found.
         """
 
         if not self.data:
@@ -208,16 +208,16 @@ class Dataset:
         Separates points into groups based on proximity thresholds.
         
         Args:
-            list1 (list): Points to classify as (x, y) tuples
-            list2 (list): Reference points as (x, y) tuples
-            distance1 (float): First proximity threshold
-            distance2 (float): Second proximity threshold
+            list1 (list[tuple[float, float]]): Points to classify as (x, y) tuples.
+            list2 (list[tuple[float, float]]): Reference points as (x, y) tuples.
+            distance1 (float): First proximity threshold.
+            distance2 (float): Second proximity threshold.
         
         Returns:
-            tuple: Three lists of indices from list1:
-                - Within distance1 of any point in list2
-                - Within distance2 but not distance1
-                - Beyond distance2
+            tuple[list[int], list[int], list[int]]: Three lists of indices from `list1`:
+                - Within `distance1` of any point in `list2`.
+                - Within `distance2` but not `distance1`.
+                - Beyond `distance2`.
         """
         train = []
         validation = []
@@ -269,18 +269,18 @@ class Dataset:
         Splits data into training, validation, and test sets.
         
         Args:
-            data_dict (dict): Output from load_data()
-            property_name (str): Property to use for splitting
-            splitting_algorithm (str): 'random' or 'inside_to_outside'
+            data_dict (dict[str, pandas.DataFrame]): Output from `load_data()`.
+            property_name (str): Property to use for splitting.
+            splitting_algorithm (str): 'random' or 'inside_to_outside'.
             **kwargs: Algorithm-specific parameters:
-                - random: train_size, val_size, test_size
-                - inside_to_outside: stable_points, distance1, distance2
+                - `random`: `train_size` (float), `val_size` (float), `test_size` (float).
+                - `inside_to_outside`: `stable_points` (list[tuple[float, float]]), `distance1` (float), `distance2` (float).
         
         Returns:
-            tuple: (train, validation, test) DataFrames
+            tuple[pandas.DataFrame, pandas.DataFrame, pandas.DataFrame]: (train, validation, test) DataFrames.
         
         Raises:
-            ValueError: For invalid algorithm or missing parameters
+            ValueError: For invalid algorithm or missing parameters.
         """
         if property_name not in data_dict:
             raise ValueError(
@@ -358,15 +358,15 @@ class Dataset:
         Returns a filtered subset of data for a property.
         
         Args:
-            property_name (str): Property to filter
-            filters (dict, optional): Domain filtering rules
-            models_to_include (list, optional): Models to include
+            property_name (str): Property to filter.
+            filters (dict, optional): Domain filtering rules.
+            models_to_include (list[str], optional): Models to include.
         
         Returns:
-            pd.DataFrame: Filtered DataFrame
+            pandas.DataFrame: Filtered DataFrame.
         
         Raises:
-            ValueError: If property not found
+            ValueError: If property not found.
         """
         if property_name not in self.data:
             raise ValueError(

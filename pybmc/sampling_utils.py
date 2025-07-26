@@ -6,13 +6,13 @@ def coverage(percentiles, rndm_m, models_output, truth_column):
     Calculates coverage percentages for credible intervals.
     
     Args:
-        percentiles (list): Percentiles to evaluate (e.g., [5, 10, ..., 95])
-        rndm_m (np.ndarray): Posterior samples of predictions
-        models_output (pd.DataFrame): DataFrame containing true values
-        truth_column (str): Name of column with true values
+        percentiles (list[int]): Percentiles to evaluate (e.g., `[5, 10, ..., 95]`).
+        rndm_m (numpy.ndarray): Posterior samples of predictions.
+        models_output (pandas.DataFrame): DataFrame containing true values.
+        truth_column (str): Name of column with true values.
     
     Returns:
-        list: Coverage percentages for each percentile
+        list[float]: Coverage percentages for each percentile.
     """
     #  How often the model’s credible intervals actually contain the true value
     data_total = len(rndm_m.T)  # Number of data points
@@ -46,14 +46,14 @@ def rndm_m_random_calculator(filtered_model_predictions, samples, Vt_hat):
     Generates posterior predictive samples and credible intervals.
     
     Args:
-        filtered_model_predictions (np.ndarray): Model predictions
-        samples (np.ndarray): Gibbs samples [beta, sigma]
-        Vt_hat (np.ndarray): Normalized right singular vectors
+        filtered_model_predictions (numpy.ndarray): Model predictions.
+        samples (numpy.ndarray): Gibbs samples `[beta, sigma]`.
+        Vt_hat (numpy.ndarray): Normalized right singular vectors.
     
     Returns:
-        tuple: 
-            - rndm_m (np.ndarray): Posterior predictive samples
-            - [lower, median, upper] (list): Credible interval arrays
+        tuple[numpy.ndarray, list[numpy.ndarray]]: 
+            - `rndm_m` (numpy.ndarray): Posterior predictive samples.
+            - `[lower, median, upper]` (list[numpy.ndarray]): Credible interval arrays.
     """
     np.random.seed(142858)
     rng = np.random.default_rng()

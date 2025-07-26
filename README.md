@@ -1,6 +1,6 @@
-# pyBMC: Bayesian Model Combination for Nuclear Mass Predictions
+# pyBMC: A General Bayesian Model Combination Package
 
-pyBMC is a Python package for performing Bayesian Model Combination (BMC) on nuclear mass models. It provides tools for data handling, orthogonalization, Gibbs sampling, and prediction with uncertainty quantification.
+pyBMC is a Python package for performing Bayesian Model Combination (BMC) on various predictive models. It provides tools for data handling, orthogonalization, Gibbs sampling, and prediction with uncertainty quantification.
 
 ## Features
 
@@ -18,66 +18,24 @@ pip install pybmc
 
 ## Quick Start
 
-```python
-from pybmc import Dataset, BayesianModelCombination
-
-# Load nuclear mass data
-dataset = Dataset("nuclear_data.h5")
-data_dict = dataset.load_data(
-    models=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
-    keys=["Binding_Energy"],
-    domain_keys=["N", "Z"]
-)
-
-# Initialize BMC
-bmc = BayesianModelCombination(
-    models_list=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
-    data_dict=data_dict,
-    truth_column_name="Binding_Energy"
-)
-
-# Split data into training, validation, and test sets
-train_df, val_df, test_df = dataset.split_data(
-    data_dict,
-    "Binding_Energy",
-    splitting_algorithm="random",
-    train_size=0.6,
-    val_size=0.2,
-    test_size=0.2
-)
-
-# Orthogonalize model predictions
-bmc.orthogonalize("Binding_Energy", train_df, components_kept=3)
-
-# Train the model combination
-bmc.train(training_options={
-    'iterations': 50000,
-    'sampler': 'gibbs_sampling'
-})
-
-# Make predictions with uncertainty quantification
-rndm_m, lower_df, median_df, upper_df = bmc.predict2("Binding_Energy")
-
-# Evaluate model performance
-coverage_results = bmc.evaluate()
-```
+For a detailed walkthrough of how to use the package, please see the [Usage Guide](docs/usage.md).
 
 ## Documentation
 
 Comprehensive documentation is available at [https://ascsn.github.io/pybmc/](https://ascsn.github.io/pybmc/), including:
 
-- API Reference
-- Usage Guides
-- Theory Background
-- Tutorial Notebooks
+- [Usage Guide](docs/usage.md)
+- [API Reference](docs/api_reference.md)
+- [Theory Background](docs/theory.md)
+- [Contribution Guidelines](docs/CONTRIBUTING.md)
 
 ## Contributing
 
-We welcome contributions! Please see our [Contribution Guidelines](CONTRIBUTING.md) for details on how to contribute to the project.
+We welcome contributions! Please see our [Contribution Guidelines](docs/CONTRIBUTING.md) for details on how to contribute to the project.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) file for details.
 
 ## Citation
 
@@ -85,7 +43,7 @@ If you use pyBMC in your research, please cite:
 
 ```bibtex
 @software{pybmc,
-  title = {pyBMC: Bayesian Model Combination for Nuclear Mass Predictions},
+  title = {pyBMC: A General Bayesian Model Combination Package},
   author = {Your Name and Contributors},
   year = {2025},
   publisher = {GitHub},

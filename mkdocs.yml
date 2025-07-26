@@ -1,9 +1,19 @@
 site_name: "pybmc Documentation"
 site_url: "https://ascsn.github.io/pybmc/"
-site_description: "Simple package for Bayesian model combination"
-site_author: "ascsn"
+site_description: "A package for Bayesian model combination"
+site_author: "Kyle Godbey"
+
 repo_url: "https://github.com/ascsn/pybmc"
 repo_name: "ascsn/pybmc"
+
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ascsn
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/ascsn_
 
 theme:
   name: "material"
@@ -50,8 +60,8 @@ theme:
       bug: octicons/bug-16
       example: octicons/beaker-16
       quote: octicons/quote-16
-  logo: assets/logo.png
-  favicon: assets/favicon.png
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
 
 markdown_extensions:
   - admonition
@@ -68,7 +78,9 @@ markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
   - attr_list
-  - pymdownx.emoji
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - def_list
   - md_in_html
   - pymdownx.tasklist:
@@ -87,7 +99,8 @@ nav:
   - Usage: usage.md
   - API Reference: api_reference.md
   - Theory: theory.md
-  - Contributing: CONTRIBUTING.md
+  - Contributing: contributing.md
+  - License: license.md
 
 plugins:
   - search
@@ -96,4 +109,5 @@ plugins:
         python:
           options:
             show_source: true
+            show_signature_annotations: true
   - autorefs

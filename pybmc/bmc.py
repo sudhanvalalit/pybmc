@@ -16,24 +16,24 @@ class BayesianModelCombination:
     using Gibbs sampling, and provides methods for prediction and evaluation.
     
     Args:
-        models_list (list): List of model names to combine
-        data_dict (dict): Dictionary from `load_data()` where keys are property names and values are DataFrames
-        truth_column_name (str): Name of the column containing ground truth values
-        weights (list, optional): Initial weights for models. Defaults to equal weights.
+        models_list (list[str]): List of model names to combine.
+        data_dict (dict[str, pandas.DataFrame]): Dictionary from `load_data()` where keys are property names and values are DataFrames.
+        truth_column_name (str): Name of the column containing ground truth values.
+        weights (list[float], optional): Initial weights for models. Defaults to equal weights.
     
     Attributes:
-        models_list (list): List of model names
-        data_dict (dict): Loaded data dictionary
-        truth_column_name (str): Ground truth column name
-        weights (list): Current model weights
-        samples (np.ndarray): Posterior samples from Gibbs sampling
-        current_property (str): Current property being processed
-        centered_experiment_train (np.ndarray): Centered experimental values
-        U_hat (np.ndarray): Reduced left singular vectors from SVD
-        Vt_hat (np.ndarray): Normalized right singular vectors
-        S_hat (np.ndarray): Retained singular values
-        Vt_hat_normalized (np.ndarray): Original right singular vectors
-        _predictions_mean_train (np.ndarray): Mean predictions across models
+        models_list (list[str]): List of model names.
+        data_dict (dict[str, pandas.DataFrame]): Loaded data dictionary.
+        truth_column_name (str): Ground truth column name.
+        weights (list[float]): Current model weights.
+        samples (numpy.ndarray): Posterior samples from Gibbs sampling.
+        current_property (str): Current property being processed.
+        centered_experiment_train (numpy.ndarray): Centered experimental values.
+        U_hat (numpy.ndarray): Reduced left singular vectors from SVD.
+        Vt_hat (numpy.ndarray): Normalized right singular vectors.
+        S_hat (numpy.ndarray): Retained singular values.
+        Vt_hat_normalized (numpy.ndarray): Original right singular vectors.
+        _predictions_mean_train (numpy.ndarray): Mean predictions across models.
     
     Example:
         >>> bmc = BayesianModelCombination(
@@ -50,13 +50,13 @@ class BayesianModelCombination:
         Initializes the BMC instance.
         
         Args:
-            models_list (list): List of model names to combine
-            data_dict (dict): Dictionary of DataFrames from Dataset.load_data()
-            truth_column_name (str): Name of column containing ground truth values
-            weights (list, optional): Initial model weights. Defaults to None (equal weights)
+            models_list (list[str]): List of model names to combine.
+            data_dict (dict[str, pandas.DataFrame]): Dictionary of DataFrames from Dataset.load_data().
+            truth_column_name (str): Name of column containing ground truth values.
+            weights (list[float], optional): Initial model weights. Defaults to None (equal weights).
         
         Raises:
-            ValueError: If models_list is not a list of strings or data_dict is invalid
+            ValueError: If `models_list` is not a list of strings or `data_dict` is invalid.
         """
 
         if not isinstance(models_list, list) or not all(
@@ -86,9 +86,9 @@ class BayesianModelCombination:
         the specified number of components for subsequent training.
         
         Args:
-            property (str): Nuclear property to orthogonalize (e.g., 'BE')
-            train_df (pd.DataFrame): Training data from Dataset.split_data()
-            components_kept (int): Number of SVD components to retain
+            property (str): Nuclear property to orthogonalize (e.g., 'BE').
+            train_df (pandas.DataFrame): Training data from Dataset.split_data().
+            components_kept (int): Number of SVD components to retain.
         
         Note:
             This method must be called before training. Results are stored in instance attributes.
@@ -137,17 +137,17 @@ class BayesianModelCombination:
         
         Args:
             training_options (dict, optional): Training configuration. Options:
-                - iterations (int): Number of Gibbs iterations (default: 50000)
-                - sampler (str): 'gibbs_sampling' or 'simplex' (default: 'gibbs_sampling')
-                - burn (int): Burn-in iterations for simplex sampler (default: 10000)
-                - stepsize (float): Proposal step size for simplex sampler (default: 0.001)
-                - b_mean_prior (np.ndarray): Prior mean vector (default: zeros)
-                - b_mean_cov (np.ndarray): Prior covariance matrix (default: diag(S_hat²))
-                - nu0_chosen (float): Degrees of freedom for variance prior (default: 1.0)
-                - sigma20_chosen (float): Prior variance (default: 0.02)
+                - iterations (int): Number of Gibbs iterations (default: 50000).
+                - sampler (str): 'gibbs_sampling' or 'simplex' (default: 'gibbs_sampling').
+                - burn (int): Burn-in iterations for simplex sampler (default: 10000).
+                - stepsize (float): Proposal step size for simplex sampler (default: 0.001).
+                - b_mean_prior (numpy.ndarray): Prior mean vector (default: zeros).
+                - b_mean_cov (numpy.ndarray): Prior covariance matrix (default: diag(S_hat²)).
+                - nu0_chosen (float): Degrees of freedom for variance prior (default: 1.0).
+                - sigma20_chosen (float): Prior variance (default: 0.02).
         
         Note:
-            Requires prior call to orthogonalize(). Stores posterior samples in self.samples.
+            Requires prior call to `orthogonalize()`. Stores posterior samples in `self.samples`.
         """
 
         if training_options is None:
@@ -199,17 +199,17 @@ class BayesianModelCombination:
         Predicts values using the trained model combination with uncertainty quantification.
         
         Args:
-            X (pd.DataFrame): Input data containing model predictions and domain information
+            X (pandas.DataFrame): Input data containing model predictions and domain information.
         
         Returns:
-            tuple: Contains:
-                - rndm_m (np.ndarray): Full posterior draws (n_samples, n_points)
-                - lower_df (pd.DataFrame): Lower bounds (2.5th percentile) with domain keys
-                - median_df (pd.DataFrame): Median predictions with domain keys
-                - upper_df (pd.DataFrame): Upper bounds (97.5th percentile) with domain keys
+            tuple[numpy.ndarray, pandas.DataFrame, pandas.DataFrame, pandas.DataFrame]: Contains:
+                - rndm_m (numpy.ndarray): Full posterior draws (n_samples, n_points).
+                - lower_df (pandas.DataFrame): Lower bounds (2.5th percentile) with domain keys.
+                - median_df (pandas.DataFrame): Median predictions with domain keys.
+                - upper_df (pandas.DataFrame): Upper bounds (97.5th percentile) with domain keys.
         
         Raises:
-            ValueError: If orthogonalize() and train() haven't been called
+            ValueError: If `orthogonalize()` and `train()` haven't been called.
         """
         if self.samples is None or self.Vt_hat is None:
             raise ValueError(
@@ -250,18 +250,18 @@ class BayesianModelCombination:
         This version uses the property name instead of a DataFrame input.
         
         Args:
-            property (str): Property name to predict (e.g., 'ChRad')
+            property (str): Property name to predict (e.g., 'ChRad').
         
         Returns:
-            tuple: Contains:
-                - rndm_m (np.ndarray): Full posterior draws (n_samples, n_points)
-                - lower_df (pd.DataFrame): Lower bounds (2.5th percentile) with domain keys
-                - median_df (pd.DataFrame): Median predictions with domain keys
-                - upper_df (pd.DataFrame): Upper bounds (97.5th percentile) with domain keys
+            tuple[numpy.ndarray, pandas.DataFrame, pandas.DataFrame, pandas.DataFrame]: Contains:
+                - rndm_m (numpy.ndarray): Full posterior draws (n_samples, n_points).
+                - lower_df (pandas.DataFrame): Lower bounds (2.5th percentile) with domain keys.
+                - median_df (pandas.DataFrame): Median predictions with domain keys.
+                - upper_df (pandas.DataFrame): Upper bounds (97.5th percentile) with domain keys.
         
         Raises:
-            ValueError: If orthogonalize() and train() haven't been called
-            KeyError: If property not found in data_dict
+            ValueError: If `orthogonalize()` and `train()` haven't been called.
+            KeyError: If property not found in `data_dict`.
         """
         if self.samples is None or self.Vt_hat is None:
             raise ValueError(
@@ -344,10 +344,10 @@ class BayesianModelCombination:
         
         Args:
             domain_filter (dict, optional): Filtering rules for domain columns.
-                Example: {"Z": (20, 30), "N": (20, 40)}
+                Example: {"Z": (20, 30), "N": (20, 40)}.
         
         Returns:
-            list: Coverage percentages for each percentile in [0, 5, 10, ..., 100]
+            list[float]: Coverage percentages for each percentile in [0, 5, 10, ..., 100].
         """
         df = self.data_dict[self.current_property]
 

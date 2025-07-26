@@ -6,17 +6,17 @@ def gibbs_sampler(y, X, iterations, prior_info):
     Performs Gibbs sampling for Bayesian linear regression.
     
     Args:
-        y (np.ndarray): Response vector (centered)
-        X (np.ndarray): Design matrix
-        iterations (int): Number of sampling iterations
-        prior_info (tuple): Prior parameters:
-            - b_mean_prior (np.ndarray): Prior mean for coefficients
-            - b_mean_cov (np.ndarray): Prior covariance matrix
-            - nu0 (float): Prior degrees of freedom for variance
-            - sigma20 (float): Prior variance
+        y (numpy.ndarray): Response vector (centered).
+        X (numpy.ndarray): Design matrix.
+        iterations (int): Number of sampling iterations.
+        prior_info (tuple[numpy.ndarray, numpy.ndarray, float, float]): Prior parameters:
+            - `b_mean_prior` (numpy.ndarray): Prior mean for coefficients.
+            - `b_mean_cov` (numpy.ndarray): Prior covariance matrix.
+            - `nu0` (float): Prior degrees of freedom for variance.
+            - `sigma20` (float): Prior variance.
     
     Returns:
-        np.ndarray: Posterior samples [beta, sigma]
+        numpy.ndarray: Posterior samples `[beta, sigma]`.
     """
     b_mean_prior, b_mean_cov, nu0, sigma20 = prior_info
     b_mean_cov_inv = np.linalg.inv(b_mean_cov)
@@ -60,17 +60,17 @@ def gibbs_sampler_simplex(
     Performs Gibbs sampling with simplex constraints on model weights.
     
     Args:
-        y (np.ndarray): Centered response vector
-        X (np.ndarray): Design matrix of principal components
-        Vt_hat (np.ndarray): Normalized right singular vectors
-        S_hat (np.ndarray): Singular values
-        iterations (int): Number of sampling iterations
-        prior_info (list): [nu0, sigma20] - prior parameters for variance
-        burn (int, optional): Burn-in iterations (default: 10000)
-        stepsize (float, optional): Proposal step size (default: 0.001)
+        y (numpy.ndarray): Centered response vector.
+        X (numpy.ndarray): Design matrix of principal components.
+        Vt_hat (numpy.ndarray): Normalized right singular vectors.
+        S_hat (numpy.ndarray): Singular values.
+        iterations (int): Number of sampling iterations.
+        prior_info (list[float]): `[nu0, sigma20]` - prior parameters for variance.
+        burn (int, optional): Burn-in iterations (default: 10000).
+        stepsize (float, optional): Proposal step size (default: 0.001).
     
     Returns:
-        np.ndarray: Posterior samples [beta, sigma]
+        numpy.ndarray: Posterior samples `[beta, sigma]`.
     """
     bias0 = np.full(len(Vt_hat.T), 1 / len(Vt_hat.T))
     nu0, sigma20 = prior_info
@@ -144,17 +144,17 @@ def USVt_hat_extraction(U, S, Vt, components_kept):
     Extracts reduced-dimensionality matrices from SVD results.
     
     Args:
-        U (np.ndarray): Left singular vectors
-        S (np.ndarray): Singular values
-        Vt (np.ndarray): Right singular vectors (transposed)
-        components_kept (int): Number of components to retain
+        U (numpy.ndarray): Left singular vectors.
+        S (numpy.ndarray): Singular values.
+        Vt (numpy.ndarray): Right singular vectors (transposed).
+        components_kept (int): Number of components to retain.
     
     Returns:
-        tuple: (U_hat, S_hat, Vt_hat, Vt_hat_normalized)
-            - U_hat: Reduced left singular vectors
-            - S_hat: Retained singular values
-            - Vt_hat: Normalized right singular vectors
-            - Vt_hat_normalized: Original right singular vectors
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray]: 
+            - `U_hat` (numpy.ndarray): Reduced left singular vectors.
+            - `S_hat` (numpy.ndarray): Retained singular values.
+            - `Vt_hat` (numpy.ndarray): Normalized right singular vectors.
+            - `Vt_hat_normalized` (numpy.ndarray): Original right singular vectors.
     """
     U_hat = np.array([U.T[i] for i in range(components_kept)]).T
     S_hat = S[:components_kept]

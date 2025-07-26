@@ -1,49 +1,93 @@
-# Usage
+# Usage Guide
 
-Here is an example of how to use the package:
+This guide provides a comprehensive walkthrough of the `pybmc` package, demonstrating how to load data, combine models, and generate predictions with uncertainty quantification. We will use the `selected_data.h5` file included in the repository for this example.
+
+## 1. Load and Prepare Data
+
+First, we import the necessary classes and specify the path to our data file. We then load the data, specifying the models and properties we're interested in.
 
 ```python
-import numpy as np
-from pybmc.models import Model
+import pandas as pd
 from pybmc.data import Dataset
 from pybmc.bmc import BayesianModelCombination
 
-# Create models
-model1 = Model("model1", np.array([1, 2, 3]), np.array([10, 20, 30]))
-model2 = Model("model2", np.array([1, 2, 3]), np.array([15, 25, 35]))
+# Path to the data file
+data_path = "pybmc/selected_data.h5"
 
-# Load data
-data_source = "path/to/data_source"
-dataset = Dataset(data_source)
-data = dataset.load_data(data_source)
+# Initialize the dataset
+dataset = Dataset(data_path)
 
-# Split data
-train_data, val_data, test_data = dataset.split_data(train_size=0.6, val_size=0.2, test_size=0.2)
-
-# Create Bayesian model combination
-bmc = BayesianModelCombination(models=[model1, model2], options={'use_orthogonalization': True})
-
-# Orthogonalize models (optional)
-bmc.orthogonalize(train_data)
-
-# Train the model combination
-bmc.train(train_data)
-
-# Predict using the model combination
-X = np.array([1, 2, 3])
-predictions = bmc.predict(X)
-
-# Evaluate the model combination
-evaluation = bmc.evaluate(val_data)
+# Load data for specified models and properties
+data_dict = dataset.load_data(
+    models=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
+    keys=["Binding_Energy"],
+    domain_keys=["N", "Z"]
+)
 ```
 
-## Explanation of Each Step
+## 2. Split the Data
 
-1. **Create models**: We create two instances of the `Model` class, `model1` and `model2`, with their respective domains and outputs.
-2. **Load data**: We create an instance of the `Dataset` class and load data from a specified source.
-3. **Split data**: We split the loaded data into training, validation, and testing sets.
-4. **Create Bayesian model combination**: We create an instance of the `BayesianModelCombination` class with the created models and an option to use orthogonalization.
-5. **Orthogonalize models (optional)**: We orthogonalize the models using the training data if the orthogonalization option is enabled.
-6. **Train the model combination**: We train the Bayesian model combination using the training data.
-7. **Predict using the model combination**: We use the trained model combination to make predictions for a given input.
-8. **Evaluate the model combination**: We evaluate the performance of the model combination using the validation data.
+Next, we split the data into training, validation, and test sets. `pybmc` supports random splitting as shown below.
+
+```python
+# Split the data into training, validation, and test sets
+train_df, val_df, test_df = dataset.split_data(
+    data_dict,
+    "Binding_Energy",
+    splitting_algorithm="random",
+    train_size=0.6,
+    val_size=0.2,
+    test_size=0.2,
+)
+```
+
+## 3. Initialize and Train the BMC Model
+
+Now, we initialize the `BayesianModelCombination` class. We provide the list of models, the data dictionary, and the name of the column containing the ground truth values.
+
+```python
+# Initialize the Bayesian Model Combination
+bmc = BayesianModelCombination(
+    models_list=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
+    data_dict=data_dict,
+    truth_column_name="Binding_Energy",
+)
+```
+
+Before training, we orthogonalize the model predictions. This is a crucial step that improves the stability and performance of the Bayesian inference.
+
+```python
+# Orthogonalize the model predictions
+bmc.orthogonalize("Binding_Energy", train_df, components_kept=3)
+```
+
+With the data prepared and the model orthogonalized, we can train the model combination. We use Gibbs sampling to infer the posterior distribution of the model weights.
+
+```python
+# Train the model
+bmc.train(training_options={"iterations": 50000, "sampler": "gibbs_sampling"})
+```
+
+## 4. Make Predictions
+
+After training, we can use the `predict2` method to generate predictions with uncertainty quantification. The method returns the full posterior draws, as well as DataFrames for the lower, median, and upper credible intervals.
+
+```python
+# Make predictions with uncertainty quantification
+rndm_m, lower_df, median_df, upper_df = bmc.predict2("Binding_Energy")
+
+# Display the first 5 rows of the median predictions
+print(median_df.head())
+```
+
+## 5. Evaluate the Model
+
+Finally, we can evaluate the performance of our model combination using the `evaluate` method. This calculates the coverage of the credible intervals, which tells us how often the true values fall within the predicted intervals.
+
+```python
+# Evaluate the model's coverage
+coverage_results = bmc.evaluate()
+
+# Print the coverage for a 95% credible interval
+print(f"Coverage for 95% credible interval: {coverage_results[19]:.2f}%")
+```
