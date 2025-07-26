@@ -182,7 +182,7 @@ class TestBayesianModelCombination(unittest.TestCase):
         bmc = BayesianModelCombination(models_list, data_dict, truth_column_name)
 
         train_df = pd.DataFrame({"model1": [1, 2], "model2": [3, 4], "model3": [5, 6], "truth": [7, 8]})
-        components_kept = 2
+        components_kept = 1
 
         # Perform orthogonalization and training
         bmc.orthogonalize("property", train_df, components_kept)
