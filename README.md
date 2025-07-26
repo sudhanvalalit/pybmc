@@ -43,8 +43,8 @@ If you use pyBMC in your research, please cite:
 
 ```bibtex
 @software{pybmc,
-  title = {pyBMC: A General Bayesian Model Combination Package},
-  author = {Your Name and Contributors},
+  title = {pyBMC: Bayesian Model Combination},
+  author = {Kyle Godbey and Troy Dasher and An Le},
   year = {2025},
   publisher = {GitHub},
   journal = {GitHub repository},

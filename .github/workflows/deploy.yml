@@ -1,11 +1,8 @@
-name: CI/CD
+name: Deployment
 
 on:
-  push:
-    branches:
-      - main
-      - beta
-  pull_request:
+  release:
+    types: [published]
 
 jobs:
   test-lint:
@@ -54,3 +51,20 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./site
 
+  deploy:
+    needs: [test-lint, docs]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.13"
+    - name: Install Poetry
+      run: pipx install poetry
+    - name: Configure Poetry
+      run: poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
+    - name: Build package
+      run: poetry build
+    - name: Publish to PyPI
+      run: poetry publish
