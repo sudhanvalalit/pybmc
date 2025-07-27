@@ -19,10 +19,10 @@ dataset = Dataset(data_path)
 
 # Load data for specified models and properties
 data_dict = dataset.load_data(
-    models=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
-    keys=["Binding_Energy"],
+    models=["FRDM12", "HFB24", "D1M",
+    "UNEDF1", "BCPM", "AME2020"],
+    keys=["BE"],
     domain_keys=["N", "Z"]
-)
 ```
 
 ## 2. Split the Data
@@ -33,7 +33,7 @@ Next, we split the data into training, validation, and test sets. `pybmc` suppor
 # Split the data into training, validation, and test sets
 train_df, val_df, test_df = dataset.split_data(
     data_dict,
-    "Binding_Energy",
+    "BE",
     splitting_algorithm="random",
     train_size=0.6,
     val_size=0.2,
@@ -48,9 +48,10 @@ Now, we initialize the `BayesianModelCombination` class. We provide the list of 
 ```python
 # Initialize the Bayesian Model Combination
 bmc = BayesianModelCombination(
-    models_list=["FRDM2012", "WS4", "HFB32", "D1M", "UNEDF1", "BCPM"],
+    models_list=["FRDM12", "HFB24", "D1M",
+    "UNEDF1", "BCPM", "AME2020"],
     data_dict=data_dict,
-    truth_column_name="Binding_Energy",
+    truth_column_name="AME2020",
 )
 ```
 
@@ -58,7 +59,7 @@ Before training, we orthogonalize the model predictions. This is a crucial step 
 
 ```python
 # Orthogonalize the model predictions
-bmc.orthogonalize("Binding_Energy", train_df, components_kept=3)
+bmc.orthogonalize("BE", train_df, components_kept=3)
 ```
 
 With the data prepared and the model orthogonalized, we can train the model combination. We use Gibbs sampling to infer the posterior distribution of the model weights.
@@ -74,7 +75,7 @@ After training, we can use the `predict2` method to generate predictions with un
 
 ```python
 # Make predictions with uncertainty quantification
-rndm_m, lower_df, median_df, upper_df = bmc.predict2("Binding_Energy")
+rndm_m, lower_df, median_df, upper_df = bmc.predict2("BE")
 
 # Display the first 5 rows of the median predictions
 print(median_df.head())
