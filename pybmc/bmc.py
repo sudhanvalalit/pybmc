@@ -3,13 +3,30 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import os
-from .inference_utils import gibbs_sampler, gibbs_sampler_simplex, USVt_hat_extraction
-from .sampling_utils import coverage, rndm_m_random_calculator
+from .inference_utils import (
+    gibbs_sampler,
+    gibbs_sampler_simplex,
+    gibbs_sampler_heteroscedastic,
+    USVt_hat_extraction,
+)
+from .sampling_utils import (
+    coverage,
+    rndm_m_random_calculator,
+    rndm_m_heteroscedastic_calculator,
+    DEFAULT_PREDICTIVE_SEED,
+)
+from .error_models import (
+    VARIANCE_MODELS,
+    DEFAULT_SAMPLER_SETTINGS,
+    HeteroscedasticMetrics,
+    required_metrics,
+    variance_basis,
+)
 
 
 class BayesianModelCombination:
     """
-    The main idea of this class is to perform BMM on the set of models that we choose 
+    The main idea of this class is to perform BMM on the set of models that we choose
     from the dataset class. What should this class contain:
     + Orthogonalization step.
     + Perform Bayesian inference on the training data that we extract from the Dataset class.
@@ -17,9 +34,10 @@ class BayesianModelCombination:
     """
 
     VALID_CONSTRAINTS = ("unconstrained", "simplex")
+    VALID_ERROR_MODELS = tuple(VARIANCE_MODELS)
 
-    def __init__(self, models_list, data_dict, truth_column_name, weights=None, constraint="unconstrained"):
-        """ 
+    def __init__(self, models_list, data_dict, truth_column_name, weights=None, constraint="unconstrained", error_model="homoscedastic"):
+        """
         Initialize the BayesianModelCombination class.
 
         :param models_list: List of model names
@@ -31,10 +49,22 @@ class BayesianModelCombination:
             - ``"simplex"``: Forces weights to lie on the probability simplex
               (each weight between 0 and 1, weights sum to 1). Uses a
               Metropolis-within-Gibbs sampler to enforce the constraint.
+        :param error_model: Noise structure of the combination. Options
+            (see :mod:`pybmc.error_models` for the variance forms):
+            - ``"homoscedastic"`` (default): A single constant variance.
+            - ``"hetero_pc_dist"`` / ``"hetero_pc_dist_quad"``: Variance
+              linear/quadratic in the distance from the training centroid
+              in principal-component space.
+            - ``"hetero_model_var"`` / ``"hetero_model_var_quad"``: Variance
+              linear/quadratic in the spread among model predictions.
+            - ``"hetero_combined_linear"`` / ``"hetero_combined_quadratic"``:
+              Variance depending on both metrics.
+            Heteroscedastic error models currently require the
+            ``"unconstrained"`` weight mode.
         """
 
         if not isinstance(models_list, list) or not all(isinstance(model, str) for model in models_list):
-            raise ValueError("The 'models' should be a list of model names (strings) for Bayesian Combination.")    
+            raise ValueError("The 'models' should be a list of model names (strings) for Bayesian Combination.")
         if not isinstance(data_dict, dict) or not all(isinstance(df, pd.DataFrame) for df in data_dict.values()):
             raise ValueError("The 'data_dict' should be a dictionary of pandas DataFrames, one per property.")
         if constraint not in self.VALID_CONSTRAINTS:
@@ -42,15 +72,29 @@ class BayesianModelCombination:
                 f"Invalid constraint '{constraint}'. "
                 f"Must be one of {self.VALID_CONSTRAINTS}."
             )
+        if error_model not in self.VALID_ERROR_MODELS:
+            raise ValueError(
+                f"Invalid error model '{error_model}'. "
+                f"Must be one of {self.VALID_ERROR_MODELS}."
+            )
+        if error_model != "homoscedastic" and constraint == "simplex":
+            raise ValueError(
+                "Heteroscedastic error models are not supported with the "
+                "'simplex' constraint; use constraint='unconstrained'."
+            )
 
-        self.data_dict = data_dict 
-        self.models_list = models_list 
+        self.data_dict = data_dict
+        self.models_list = models_list
         self.models = [m for m in models_list if m != 'truth']
-        self.weights = weights if weights is not None else None 
+        self.weights = weights if weights is not None else None
         self.truth_column_name = truth_column_name
         self.constraint = constraint
+        self.error_model = error_model
         self.samples = None
         self.Vt_hat = None
+        self.mh_acceptance_rate_ = None
+        self._trained_error_model = None
+        self._metrics_calculator = None
 
 
     def orthogonalize(self, property, train_df, components_kept):
@@ -94,6 +138,9 @@ class BayesianModelCombination:
         self.S_hat = S_hat
         self.Vt_hat_normalized = Vt_hat_normalized
         self._predictions_mean_train = predictions_mean_train
+        # Raw training predictions, needed to fit the heteroscedasticity
+        # metrics (PC-space centroid and normalization bounds).
+        self._train_model_predictions = model_predictions_train
 
 
     def train(self, training_options=None):
@@ -101,20 +148,42 @@ class BayesianModelCombination:
         Train the model combination using training data and optional training parameters.
 
         :param training_options: Dictionary of training options. Keys:
-            - 'iterations': (int) Number of Gibbs iterations (default 50000)
+            - 'iterations': (int) Number of retained Gibbs samples (default 50000)
             - 'sampler': (str) Override the constraint mode for this training run.
               ``"unconstrained"`` or ``"simplex"``. If not provided, uses the
               instance-level ``self.constraint`` set at initialization.
+            - 'error_model': (str) Override the error model for this training
+              run (see ``VALID_ERROR_MODELS``). If not provided, uses the
+              instance-level ``self.error_model`` set at initialization.
             - 'b_mean_prior': (np.ndarray) Prior mean vector (default zeros)
-              *(unconstrained sampler only)*
+              *(unconstrained and heteroscedastic samplers)*
             - 'b_mean_cov': (np.ndarray) Prior covariance matrix (default diag(S_hat²))
-              *(unconstrained sampler only)*
+              *(unconstrained and heteroscedastic samplers)*
             - 'nu0_chosen': (float) Degrees of freedom for variance prior (default 1.0)
             - 'sigma20_chosen': (float) Prior variance (default 0.02)
-            - 'burn': (int) Burn-in iterations (default 10000)
-              *(simplex sampler only)*
+            - 'burn': (int) Burn-in iterations (default 10000 for simplex,
+              5000 for heteroscedastic)
+              *(simplex and heteroscedastic samplers)*
             - 'stepsize': (float) Proposal step size (default 0.001)
               *(simplex sampler only)*
+            - 'proposal_scales': (list) Diagonal of the Metropolis-Hastings
+              proposal covariance for the variance parameters; sensible
+              per-model defaults are used if omitted
+              *(heteroscedastic samplers only)*
+            - 'init_params': (list) Initial values for the non-constant
+              variance parameters *(heteroscedastic samplers only)*
+            - 'prior_spec': (list of (shape, scale)) Gamma priors for the
+              variance parameters *(heteroscedastic samplers only)*
+            - 'adapt_proposal': (bool) Rescale the proposal during burn-in
+              toward 'target_acceptance' (default True)
+              *(heteroscedastic samplers only)*
+            - 'target_acceptance': (float) Acceptance rate targeted by the
+              burn-in adaptation (default 0.25)
+              *(heteroscedastic samplers only)*
+
+        After training with a heteroscedastic error model, the
+        Metropolis-Hastings acceptance rate is available in
+        ``self.mh_acceptance_rate_``.
         """
         if training_options is None:
             training_options = {}
@@ -127,13 +196,62 @@ class BayesianModelCombination:
                 f"Must be one of {self.VALID_CONSTRAINTS}."
             )
 
+        # Same override pattern for the error model.
+        error_model_mode = training_options.get('error_model', self.error_model)
+        if error_model_mode not in self.VALID_ERROR_MODELS:
+            raise ValueError(
+                f"Invalid error model '{error_model_mode}'. "
+                f"Must be one of {self.VALID_ERROR_MODELS}."
+            )
+        if error_model_mode != "homoscedastic" and sampler_mode == "simplex":
+            raise ValueError(
+                "Heteroscedastic error models are not supported with the "
+                "'simplex' sampler; use the unconstrained sampler."
+            )
+
         iterations = training_options.get('iterations', 50000)
         num_components = self.U_hat.shape[1]
         S_hat = self.S_hat
         nu0_chosen = training_options.get('nu0_chosen', 1.0)
         sigma20_chosen = training_options.get('sigma20_chosen', 0.02)
 
-        if sampler_mode == "simplex":
+        if error_model_mode != "homoscedastic":
+            settings = DEFAULT_SAMPLER_SETTINGS[error_model_mode]
+            terms = VARIANCE_MODELS[error_model_mode]
+
+            # Fit the metrics (PC centroid, normalization bounds) on the
+            # training predictions, then build the variance design matrix.
+            self._metrics_calculator = HeteroscedasticMetrics(
+                required_metrics(error_model_mode)
+            ).fit(self._train_model_predictions, self.Vt_hat)
+            metrics_train = self._metrics_calculator.compute(
+                self._train_model_predictions
+            )
+            basis_train = variance_basis(metrics_train, terms)
+
+            b_mean_prior = training_options.get('b_mean_prior', np.zeros(num_components))
+            b_mean_cov = training_options.get('b_mean_cov', np.diag(S_hat**2))
+            self.samples, self.mh_acceptance_rate_ = gibbs_sampler_heteroscedastic(
+                self.centered_experiment_train,
+                self.U_hat,
+                basis_train,
+                iterations,
+                burn=training_options.get('burn', 5000),
+                proposal_scales=training_options.get(
+                    'proposal_scales', settings['proposal_scales']
+                ),
+                init_params=training_options.get(
+                    'init_params', settings['init_params']
+                ),
+                prior_spec=training_options.get(
+                    'prior_spec', settings['prior_spec']
+                ),
+                b_mean_prior=b_mean_prior,
+                b_mean_cov=b_mean_cov,
+                adapt_proposal=training_options.get('adapt_proposal', True),
+                target_acceptance=training_options.get('target_acceptance', 0.25),
+            )
+        elif sampler_mode == "simplex":
             burn = training_options.get('burn', 10000)
             stepsize = training_options.get('stepsize', 0.001)
             self.samples = gibbs_sampler_simplex(
@@ -156,13 +274,21 @@ class BayesianModelCombination:
                 [b_mean_prior, b_mean_cov, nu0_chosen, sigma20_chosen],
             )
 
+        # Remember which error model produced self.samples so that
+        # predict()/evaluate() use the matching predictive distribution.
+        self._trained_error_model = error_model_mode
 
 
-    def predict(self, property):
+
+    def predict(self, property, seed=DEFAULT_PREDICTIVE_SEED):
         """
         Predict a specified property using the model weights learned during training.
 
         :param property: The property name to predict (e.g., 'ChRad').
+        :param seed: Seed for the posterior predictive draws (subsampling
+            of the posterior samples and the noise added on top).
+            Defaults to a fixed constant so repeated calls are
+            reproducible; pass a different value for independent draws.
         :return:
             - rndm_m: array of shape (n_samples, n_points), full posterior draws
             - lower_df: DataFrame with columns domain_keys + ['Predicted_Lower']
@@ -191,7 +317,9 @@ class BayesianModelCombination:
         model_preds = df[available_models].values
         domain_df = df[domain_keys].reset_index(drop=True)
 
-        rndm_m, (lower, median, upper) = rndm_m_random_calculator(model_preds, self.samples, self.Vt_hat)
+        rndm_m, (lower, median, upper) = self._posterior_predictive(
+            model_preds, seed=seed
+        )
 
         # Build output DataFrames
         lower_df = domain_df.copy()
@@ -206,11 +334,14 @@ class BayesianModelCombination:
 
         return rndm_m, lower_df, median_df, upper_df
 
-    def evaluate(self, domain_filter=None):
+    def evaluate(self, domain_filter=None, seed=DEFAULT_PREDICTIVE_SEED):
         """
         Evaluate the model combination using coverage calculation.
 
         :param domain_filter: dict with optional domain key ranges, e.g., {"Z": (20, 30), "N": (20, 40)}
+        :param seed: Seed for the posterior predictive draws underlying
+            the coverage calculation. Defaults to a fixed constant so
+            repeated calls are reproducible.
         :return: coverage list for each percentile
         """
         df = self.data_dict[self.current_property]
@@ -229,10 +360,35 @@ class BayesianModelCombination:
                 else:
                     df = df[df[col] == cond]
 
+        # Coverage is only defined where truth values exist.
+        df = df.dropna(subset=[self.truth_column_name])
+
         preds = df[self.models].to_numpy()
-        rndm_m, (lower, median, upper) = rndm_m_random_calculator(preds, self.samples, self.Vt_hat)
+        rndm_m, (lower, median, upper) = self._posterior_predictive(preds, seed=seed)
 
         return coverage(np.arange(0, 101, 5), rndm_m, df, truth_column=self.truth_column_name)
+
+    def _posterior_predictive(self, model_preds, seed=DEFAULT_PREDICTIVE_SEED):
+        """
+        Posterior predictive draws for the given model predictions, using
+        the predictive distribution matching the trained error model.
+
+        :param model_preds: Array of shape (n_points, n_models) with one
+            column per model in ``self.models`` order.
+        :param seed: Seed for the posterior predictive draws.
+        :return: Tuple ``(rndm_m, (lower, median, upper))``.
+        """
+        if self._trained_error_model not in (None, "homoscedastic"):
+            metrics = self._metrics_calculator.compute(model_preds)
+            basis = variance_basis(
+                metrics, VARIANCE_MODELS[self._trained_error_model]
+            )
+            return rndm_m_heteroscedastic_calculator(
+                model_preds, self.samples, self.Vt_hat, basis, seed=seed
+            )
+        return rndm_m_random_calculator(
+            model_preds, self.samples, self.Vt_hat, seed=seed
+        )
 
     def get_weights(self, summary=True):
         """
@@ -252,7 +408,10 @@ class BayesianModelCombination:
         if self.samples is None or self.Vt_hat is None:
             raise ValueError("Must call `orthogonalize()` and `train()` before getting weights.")
 
-        betas = self.samples[:, :-1]
+        # The first k columns are the PC coefficients; the remaining
+        # columns are error-model parameters (one sigma for the
+        # homoscedastic model, several for heteroscedastic models).
+        betas = self.samples[:, : self.Vt_hat.shape[0]]
         n_models = self.Vt_hat.shape[1]
         default_weights = np.full(n_models, 1.0 / n_models)
         weight_matrix = betas @ self.Vt_hat + default_weights

@@ -12,7 +12,10 @@ pybmc is a Python package for performing Bayesian Model Combination (BMC) on var
 - **Orthogonalization**: Transform model predictions using Singular Value Decomposition (SVD)
 - **Bayesian Inference**: Perform Gibbs sampling for model combination
 - **Uncertainty Quantification**: Generate predictions with credible intervals
-- **Model Evaluation**: Calculate coverage statistics for model validation
+- **Heteroscedastic Error Models**: Let the predictive variance grow with the
+  distance from the training region and/or the disagreement among models
+- **Model Evaluation**: Calculate coverage statistics and calibration
+  diagnostics for model validation
 
 ## Installation
 

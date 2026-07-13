@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Heteroscedastic error models: the noise variance can now depend on the
+  distance from the training data in principal-component space
+  (`pc_dist`) and/or on the disagreement among model predictions
+  (`model_var`), linearly or quadratically (new `error_model` parameter
+  of `BayesianModelCombination`, new `pybmc.error_models` module and
+  `gibbs_sampler_heteroscedastic` Gibbs-within-Metropolis sampler with
+  burn-in proposal adaptation toward a target acceptance rate)
+- Posterior predictive sampling with per-point variances
+  (`rndm_m_heteroscedastic_calculator`)
+- Calibration diagnostics: `coverage_quality` (mean |empirical - nominal|
+  coverage) and `diagnose_coverage_shape` (under-/over-dispersion
+  classification)
+- `mh_acceptance_rate_` attribute on `BayesianModelCombination` after
+  heteroscedastic training
+
+### Fixed
+- `get_weights()` now slices the coefficient columns by the number of
+  kept components instead of assuming a single trailing noise parameter
+- `evaluate()` now excludes points without truth values, as documented
 - Comprehensive docstrings for all public classes and functions
 - CONTRIBUTING.md with contribution guidelines
 - CHANGELOG.md to track project changes

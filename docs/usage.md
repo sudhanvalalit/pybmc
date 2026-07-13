@@ -172,6 +172,87 @@ bmc.train(training_options={
 })
 ```
 
+### Heteroscedastic Error Models
+
+By default, `pybmc` assumes **homoscedastic** noise: a single constant variance
+for every data point. In practice the combined model is often much more
+uncertain far from the training data (extrapolation) or where the constituent
+models disagree. Heteroscedastic error models let the noise variance depend on
+two per-point metrics:
+
+- `pc_dist` (\(d_i\)): distance of point \(i\) from the training-data centroid in
+  principal-component space — grows away from the fitted region.
+- `model_var` (\(v_i\)): variance among the individual model predictions at
+  point \(i\) — grows where the models disagree.
+
+Both metrics are min-max normalized with the *training* values, so
+extrapolated points can exceed 1. The available error models are:
+
+| `error_model` | Variance \(\sigma_i^2\) |
+| --- | --- |
+| `homoscedastic` (default) | \(\sigma^2\) |
+| `hetero_pc_dist` | \(\alpha + \beta d_i\) |
+| `hetero_model_var` | \(\alpha + \beta v_i\) |
+| `hetero_pc_dist_quad` | \(\alpha + \beta_1 d_i + \beta_2 d_i^2\) |
+| `hetero_model_var_quad` | \(\alpha + \beta_1 v_i + \beta_2 v_i^2\) |
+| `hetero_combined_linear` | \(\alpha + \beta_d d_i + \beta_m v_i\) |
+| `hetero_combined_quadratic` | \(\alpha + \beta_{d1} d_i + \beta_{d2} d_i^2 + \beta_{m1} v_i + \beta_{m2} v_i^2\) |
+
+Select an error model at initialization (or override per training run with
+`training_options={"error_model": ...}`):
+
+```python
+bmc = BayesianModelCombination(
+    models_list=["FRDM12", "HFB24", "D1M", "UNEDF1", "BCPM"],
+    data_dict=data_dict,
+    truth_column_name="AME2020",
+    error_model="hetero_model_var",   # variance grows with model spread
+)
+
+bmc.orthogonalize("BE", train_df, components_kept=3)
+bmc.train(training_options={
+    "iterations": 50000,
+    "burn": 5000,            # burn-in for the Metropolis-Hastings step
+})
+
+print(f"MH acceptance rate: {bmc.mh_acceptance_rate_:.2%}")
+
+# predict() and evaluate() automatically use per-point variances
+rndm_m, lower_df, median_df, upper_df = bmc.predict("BE")
+```
+
+The coefficients \(b\) are still updated with conjugate Gibbs steps; the
+variance parameters \((\alpha, \beta, \dots)\) are sampled with a
+positivity-constrained Metropolis-Hastings step under Gamma priors. During
+burn-in the proposal covariance is automatically rescaled toward a target
+acceptance rate of 25% (and then frozen), so the defaults work across data
+scales. All tuning knobs can be overridden through `training_options`
+(`proposal_scales`, `init_params`, `prior_spec`, `adapt_proposal`,
+`target_acceptance`). Check `bmc.mh_acceptance_rate_` after training; if it
+is far from ~25%, increase `burn` or set `proposal_scales` manually.
+
+!!! note "Simplex constraint"
+    Heteroscedastic error models currently require the unconstrained weight
+    mode; combining them with `constraint="simplex"` raises a `ValueError`.
+
+To compare error models quantitatively, score the coverage curve returned by
+`evaluate()` — 0 is perfect calibration, and the diagnosis tells you whether
+intervals are too narrow (`underdispersed`) or too wide (`overdispersed`):
+
+```python
+import numpy as np
+from pybmc import coverage_quality, diagnose_coverage_shape
+
+percentiles = np.arange(0, 101, 5)
+
+for error_model in ["homoscedastic", "hetero_model_var", "hetero_combined_linear"]:
+    bmc.train(training_options={"iterations": 50000, "error_model": error_model})
+    cov = bmc.evaluate()
+    score = coverage_quality(percentiles, cov)
+    diag = diagnose_coverage_shape(percentiles, cov)
+    print(f"{error_model:25s} score={score:6.2f}  ({diag['diagnosis']})")
+```
+
 ### Inspecting Model Weights
 
 After training, you can inspect the inferred model weights using `get_weights()`:
