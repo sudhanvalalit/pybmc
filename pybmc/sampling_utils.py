@@ -1,10 +1,17 @@
 import numpy as np
 
+from .error_models import VARIANCE_FLOOR
+from .rng import DEFAULT_SEED, get_rng
+
 #: Default seed for posterior predictive draws (subsampling of posterior
 #: samples and the noise added on top) when the caller does not supply
-#: one explicitly. Callers that need independent draws across repeated
-#: calls (e.g. outer Monte Carlo loops) should pass their own ``seed``.
-DEFAULT_PREDICTIVE_SEED = 142858
+#: one explicitly. This is the same seed that drives the package-wide
+#: generator used by the MCMC samplers (see :mod:`pybmc.rng`), so one
+#: constant governs all pybmc randomness. Callers that need independent
+#: draws across repeated calls (e.g. outer Monte Carlo loops) can pass
+#: their own ``seed``, or ``seed=None`` to draw from the shared
+#: package-wide stream instead.
+DEFAULT_PREDICTIVE_SEED = DEFAULT_SEED
 
 
 def coverage(percentiles, rndm_m, models_output, truth_column):
@@ -20,7 +27,7 @@ def coverage(percentiles, rndm_m, models_output, truth_column):
     Returns:
         list[float]: Coverage percentages for each percentile.
     """
-    #  How often the model’s credible intervals actually contain the true value
+    #  How often the model's credible intervals actually contain the true value
     data_total = len(rndm_m.T)  # Number of data points
     M_evals = len(rndm_m)  # Number of samples
     data_true = models_output[truth_column].tolist()
@@ -47,53 +54,31 @@ def rndm_m_random_calculator(
     filtered_model_predictions, samples, Vt_hat, seed=DEFAULT_PREDICTIVE_SEED
 ):
     """
-    Generates posterior predictive samples and credible intervals.
+    Posterior predictive samples for the homoscedastic model.
+
+    The homoscedastic model is the constant-only special case of the
+    heteroscedastic predictive distribution, so this delegates to
+    `rndm_m_heteroscedastic_calculator` with a constant-only variance
+    basis.
 
     Args:
         filtered_model_predictions (numpy.ndarray): Model predictions.
-        samples (numpy.ndarray): Gibbs samples `[beta, sigma]`.
+        samples (numpy.ndarray): Posterior samples `[beta, sigma^2]`.
         Vt_hat (numpy.ndarray): Normalized right singular vectors.
-        seed (int, optional): Seed for the posterior predictive draws
-            (subsampling of `samples` and the noise added on top).
-            Defaults to `DEFAULT_PREDICTIVE_SEED`.
+        seed (int | None, optional): Seed for the posterior predictive
+            draws (subsampling of `samples` and the noise added on top).
+            Defaults to `DEFAULT_PREDICTIVE_SEED`; pass None to draw
+            from the shared package-wide stream instead.
 
     Returns:
         tuple[numpy.ndarray, list[numpy.ndarray]]:
             - `rndm_m` (numpy.ndarray): Posterior predictive samples.
             - `[lower, median, upper]` (list[numpy.ndarray]): Credible interval arrays.
     """
-    rng = np.random.default_rng(seed)
-
-    n_draws = min(10000, len(samples))
-    replace = len(samples) < 10000
-    theta_rand_selected = rng.choice(samples, n_draws, replace=replace)
-
-    # Extract betas and noise std deviations
-    betas = theta_rand_selected[:, :-1]  # shape: (10000, num_models - 1)
-    noise_stds = theta_rand_selected[:, -1]  # shape: (10000,)
-
-    # Compute model weights: shape (10000, num_models)
-    default_weights = np.full(Vt_hat.shape[1], 1 / Vt_hat.shape[1])
-    model_weights_random = (
-        betas @ Vt_hat + default_weights
-    )  # broadcasting default_weights
-
-    # Generate noiseless predictions: shape (10000, num_data_points)
-    yvals_rand_radius = (
-        model_weights_random @ filtered_model_predictions.T
-    )  # dot product
-
-    # Add Gaussian noise with std = noise_stds (assume diagonal covariance)
-    # We'll use broadcasting: noise_stds[:, None] * standard normal noise
-    noise = rng.standard_normal(yvals_rand_radius.shape) * noise_stds[:, None]
-    rndm_m = yvals_rand_radius + noise
-
-    # Compute credible intervals
-    lower_radius = np.percentile(rndm_m, 2.5, axis=0)
-    median_radius = np.percentile(rndm_m, 50, axis=0)
-    upper_radius = np.percentile(rndm_m, 97.5, axis=0)
-
-    return rndm_m, [lower_radius, median_radius, upper_radius]
+    constant_basis = np.ones((filtered_model_predictions.shape[0], 1))
+    return rndm_m_heteroscedastic_calculator(
+        filtered_model_predictions, samples, Vt_hat, constant_basis, seed=seed
+    )
 
 
 def rndm_m_heteroscedastic_calculator(
@@ -101,11 +86,13 @@ def rndm_m_heteroscedastic_calculator(
     seed=DEFAULT_PREDICTIVE_SEED,
 ):
     """
-    Generates posterior predictive samples for heteroscedastic models.
+    Generates posterior predictive samples for any error model.
 
-    Mirrors `rndm_m_random_calculator`, but the noise added to each
-    prediction has a per-point variance ``sigma_i^2 = phi_i . theta``
-    where ``theta`` are the variance parameters of each posterior draw.
+    The noise added to each prediction has a per-point variance
+    ``sigma_i^2 = phi_i . theta`` where ``theta`` are the variance
+    parameters of each posterior draw. The homoscedastic model is the
+    special case of a constant-only basis (a single column of ones),
+    handled by the `rndm_m_random_calculator` convenience wrapper.
 
     Args:
         filtered_model_predictions (numpy.ndarray): Model predictions,
@@ -117,9 +104,10 @@ def rndm_m_heteroscedastic_calculator(
             ``(k, n_models)``.
         variance_basis (numpy.ndarray): Variance design matrix for the
             prediction points, shape ``(n_points, p)``.
-        seed (int, optional): Seed for the posterior predictive draws
-            (subsampling of `samples` and the noise added on top).
-            Defaults to `DEFAULT_PREDICTIVE_SEED`.
+        seed (int | None, optional): Seed for the posterior predictive
+            draws (subsampling of `samples` and the noise added on top).
+            Defaults to `DEFAULT_PREDICTIVE_SEED`; pass None to draw
+            from the shared package-wide stream instead.
 
     Returns:
         tuple[numpy.ndarray, list[numpy.ndarray]]:
@@ -127,7 +115,7 @@ def rndm_m_heteroscedastic_calculator(
             - `[lower, median, upper]` (list[numpy.ndarray]): 95% credible
               interval bounds and median.
     """
-    rng = np.random.default_rng(seed)
+    rng = get_rng(seed)
 
     n_draws = min(10000, len(samples))
     replace = len(samples) < 10000
@@ -142,10 +130,12 @@ def rndm_m_heteroscedastic_calculator(
     model_weights_random = betas @ Vt_hat + default_weights
     yvals_central = model_weights_random @ filtered_model_predictions.T
 
-    # Per-draw, per-point variances (n_draws, n_points), floored to stay
-    # positive for parameter draws that dip below zero on some points.
+    # Per-draw, per-point variances (n_draws, n_points). The floor is
+    # needed here (unlike during sampling) because the normalized metrics
+    # of extrapolated points can be negative, so phi . theta can dip
+    # below zero even though every theta draw is positive.
     sigma2 = variance_params @ variance_basis.T
-    sigma2 = np.maximum(sigma2, 1e-9)
+    sigma2 = np.maximum(sigma2, VARIANCE_FLOOR)
 
     noise = rng.standard_normal(yvals_central.shape) * np.sqrt(sigma2)
     rndm_m = yvals_central + noise

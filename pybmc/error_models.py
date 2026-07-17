@@ -26,16 +26,32 @@ with two physics-informed, per-point metrics:
 
 Both metrics are min-max normalized using the *training* points only, so
 values on extrapolated points can exceed 1.
+
+Every model — the homoscedastic one included — is parametrized on the
+variance (sigma^2) scale and shares the single likelihood
+``y_i ~ N(X_i . b, sigma_i^2)`` sampled by
+:func:`pybmc.inference_utils.gibbs_sampler_heteroscedastic`; the
+homoscedastic model is simply the case where the variance basis is the
+constant column alone.
 """
 
 import numpy as np
 
-#: Floor applied to variances to keep them positive and finite.
+#: Floor applied to a variance only where positivity is *not* guaranteed
+#: by construction: the sampler's initial constant term (estimated from
+#: data residuals, which can be exactly zero for a perfect fit) and
+#: prediction-time variances (the normalized metrics of extrapolated
+#: points can be negative, so ``phi . theta`` can dip below zero there).
+#: During sampling no floor is needed: the variance parameters are kept
+#: strictly positive by the Metropolis-Hastings step and the training
+#: variance basis is non-negative with a leading column of ones, so
+#: every per-point variance is positive by construction.
 VARIANCE_FLOOR = 1e-9
 
 #: Maps each error-model name to its variance-basis terms beyond the
 #: constant, as ``(metric_name, power)`` tuples. ``homoscedastic`` has no
-#: terms and is handled by the standard samplers.
+#: terms: its variance basis is the constant column alone, and it runs
+#: through the same likelihood and sampler as every other error model.
 VARIANCE_MODELS = {
     "homoscedastic": [],
     "hetero_pc_dist": [("pc_dist", 1)],
@@ -57,6 +73,11 @@ VARIANCE_MODELS = {
 #: ``(shape, scale)`` pairs for every variance parameter (constant term
 #: first).
 DEFAULT_SAMPLER_SETTINGS = {
+    "homoscedastic": {
+        "proposal_scales": [0.05],
+        "init_params": [],
+        "prior_spec": [(2, 10)],
+    },
     "hetero_pc_dist": {
         "proposal_scales": [0.05, 0.005],
         "init_params": [0.01],
@@ -117,7 +138,8 @@ def variance_parameter_names(error_model):
 
     Returns:
         list[str]: Names such as ``['alpha', 'beta_pc_dist^1', ...]``;
-        ``['sigma']`` for the homoscedastic model.
+        ``['sigma^2']`` for the homoscedastic model (whose constant term
+        is the variance itself).
     """
     terms = VARIANCE_MODELS[error_model] if error_model in VARIANCE_MODELS else None
     if terms is None:
@@ -126,7 +148,7 @@ def variance_parameter_names(error_model):
             f"Must be one of {tuple(VARIANCE_MODELS)}."
         )
     if not terms:
-        return ["sigma"]
+        return ["sigma^2"]
     return ["alpha"] + [f"beta_{metric}^{power}" for metric, power in terms]
 
 

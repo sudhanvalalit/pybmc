@@ -4,14 +4,12 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import os
 from .inference_utils import (
-    gibbs_sampler,
     gibbs_sampler_simplex,
     gibbs_sampler_heteroscedastic,
     USVt_hat_extraction,
 )
 from .sampling_utils import (
     coverage,
-    rndm_m_random_calculator,
     rndm_m_heteroscedastic_calculator,
     DEFAULT_PREDICTIVE_SEED,
 )
@@ -26,7 +24,7 @@ from .error_models import (
 
 class BayesianModelCombination:
     """
-    The main idea of this class is to perform BMM on the set of models that we choose
+    The main idea of this class is to perform Bayesian Model Combination (BMC) on the set of models that we choose
     from the dataset class. What should this class contain:
     + Orthogonalization step.
     + Perform Bayesian inference on the training data that we extract from the Dataset class.
@@ -147,6 +145,12 @@ class BayesianModelCombination:
         """
         Train the model combination using training data and optional training parameters.
 
+        All error models (the homoscedastic one included) share the
+        likelihood ``y_i ~ N(X_i . b, sigma_i^2)`` and are trained with
+        the same Gibbs-within-Metropolis sampler; the homoscedastic
+        model is simply the case where the variance basis is the
+        constant column alone, so ``sigma_i^2 = sigma^2``.
+
         :param training_options: Dictionary of training options. Keys:
             - 'iterations': (int) Number of retained Gibbs samples (default 50000)
             - 'sampler': (str) Override the constraint mode for this training run.
@@ -155,35 +159,39 @@ class BayesianModelCombination:
             - 'error_model': (str) Override the error model for this training
               run (see ``VALID_ERROR_MODELS``). If not provided, uses the
               instance-level ``self.error_model`` set at initialization.
+            - 'seed': (int) Seed for the sampler. If not provided, the
+              sampler draws from the shared package-wide generator
+              (see :mod:`pybmc.rng`), which is seeded at import.
             - 'b_mean_prior': (np.ndarray) Prior mean vector (default zeros)
-              *(unconstrained and heteroscedastic samplers)*
+              *(unconstrained sampler)*
             - 'b_mean_cov': (np.ndarray) Prior covariance matrix (default diag(S_hat²))
-              *(unconstrained and heteroscedastic samplers)*
+              *(unconstrained sampler)*
             - 'nu0_chosen': (float) Degrees of freedom for variance prior (default 1.0)
+              *(simplex sampler only)*
             - 'sigma20_chosen': (float) Prior variance (default 0.02)
+              *(simplex sampler only)*
             - 'burn': (int) Burn-in iterations (default 10000 for simplex,
-              5000 for heteroscedastic)
-              *(simplex and heteroscedastic samplers)*
+              5000 otherwise)
             - 'stepsize': (float) Proposal step size (default 0.001)
               *(simplex sampler only)*
             - 'proposal_scales': (list) Diagonal of the Metropolis-Hastings
               proposal covariance for the variance parameters; sensible
               per-model defaults are used if omitted
-              *(heteroscedastic samplers only)*
+              *(unconstrained sampler)*
             - 'init_params': (list) Initial values for the non-constant
-              variance parameters *(heteroscedastic samplers only)*
+              variance parameters *(unconstrained sampler)*
             - 'prior_spec': (list of (shape, scale)) Gamma priors for the
-              variance parameters *(heteroscedastic samplers only)*
+              variance parameters *(unconstrained sampler)*
             - 'adapt_proposal': (bool) Rescale the proposal during burn-in
               toward 'target_acceptance' (default True)
-              *(heteroscedastic samplers only)*
+              *(unconstrained sampler)*
             - 'target_acceptance': (float) Acceptance rate targeted by the
               burn-in adaptation (default 0.25)
-              *(heteroscedastic samplers only)*
+              *(unconstrained sampler)*
 
-        After training with a heteroscedastic error model, the
-        Metropolis-Hastings acceptance rate is available in
-        ``self.mh_acceptance_rate_``.
+        After training with the unconstrained sampler, the
+        Metropolis-Hastings acceptance rate of the variance parameters
+        is available in ``self.mh_acceptance_rate_``.
         """
         if training_options is None:
             training_options = {}
@@ -212,22 +220,48 @@ class BayesianModelCombination:
         iterations = training_options.get('iterations', 50000)
         num_components = self.U_hat.shape[1]
         S_hat = self.S_hat
-        nu0_chosen = training_options.get('nu0_chosen', 1.0)
-        sigma20_chosen = training_options.get('sigma20_chosen', 0.02)
+        seed = training_options.get('seed')
 
-        if error_model_mode != "homoscedastic":
+        if sampler_mode == "simplex":
+            nu0_chosen = training_options.get('nu0_chosen', 1.0)
+            sigma20_chosen = training_options.get('sigma20_chosen', 0.02)
+            burn = training_options.get('burn', 10000)
+            stepsize = training_options.get('stepsize', 0.001)
+            self._metrics_calculator = None
+            self.mh_acceptance_rate_ = None
+            self.samples = gibbs_sampler_simplex(
+                self.centered_experiment_train,
+                self.U_hat,
+                self.Vt_hat,
+                self.S_hat,
+                iterations,
+                [nu0_chosen, sigma20_chosen],
+                burn=burn,
+                stepsize=stepsize,
+                seed=seed,
+            )
+        else:
             settings = DEFAULT_SAMPLER_SETTINGS[error_model_mode]
             terms = VARIANCE_MODELS[error_model_mode]
+            metric_names = required_metrics(error_model_mode)
 
-            # Fit the metrics (PC centroid, normalization bounds) on the
-            # training predictions, then build the variance design matrix.
-            self._metrics_calculator = HeteroscedasticMetrics(
-                required_metrics(error_model_mode)
-            ).fit(self._train_model_predictions, self.Vt_hat)
-            metrics_train = self._metrics_calculator.compute(
-                self._train_model_predictions
-            )
-            basis_train = variance_basis(metrics_train, terms)
+            if metric_names:
+                # Fit the metrics (PC centroid, normalization bounds) on the
+                # training predictions, then build the variance design matrix.
+                self._metrics_calculator = HeteroscedasticMetrics(
+                    metric_names
+                ).fit(self._train_model_predictions, self.Vt_hat)
+                metrics_train = self._metrics_calculator.compute(
+                    self._train_model_predictions
+                )
+                basis_train = variance_basis(metrics_train, terms)
+            else:
+                # Homoscedastic: the variance basis is the constant column
+                # alone, so theta = [sigma^2].
+                self._metrics_calculator = None
+                basis_train = np.ones(
+                    (len(self.centered_experiment_train), 1)
+                )
 
             b_mean_prior = training_options.get('b_mean_prior', np.zeros(num_components))
             b_mean_cov = training_options.get('b_mean_cov', np.diag(S_hat**2))
@@ -250,28 +284,7 @@ class BayesianModelCombination:
                 b_mean_cov=b_mean_cov,
                 adapt_proposal=training_options.get('adapt_proposal', True),
                 target_acceptance=training_options.get('target_acceptance', 0.25),
-            )
-        elif sampler_mode == "simplex":
-            burn = training_options.get('burn', 10000)
-            stepsize = training_options.get('stepsize', 0.001)
-            self.samples = gibbs_sampler_simplex(
-                self.centered_experiment_train,
-                self.U_hat,
-                self.Vt_hat,
-                self.S_hat,
-                iterations,
-                [nu0_chosen, sigma20_chosen],
-                burn=burn,
-                stepsize=stepsize,
-            )
-        else:
-            b_mean_prior = training_options.get('b_mean_prior', np.zeros(num_components))
-            b_mean_cov = training_options.get('b_mean_cov', np.diag(S_hat**2))
-            self.samples = gibbs_sampler(
-                self.centered_experiment_train,
-                self.U_hat,
-                iterations,
-                [b_mean_prior, b_mean_cov, nu0_chosen, sigma20_chosen],
+                seed=seed,
             )
 
         # Remember which error model produced self.samples so that
@@ -378,16 +391,16 @@ class BayesianModelCombination:
         :param seed: Seed for the posterior predictive draws.
         :return: Tuple ``(rndm_m, (lower, median, upper))``.
         """
-        if self._trained_error_model not in (None, "homoscedastic"):
+        error_model = self._trained_error_model or "homoscedastic"
+        terms = VARIANCE_MODELS[error_model]
+        if terms:
             metrics = self._metrics_calculator.compute(model_preds)
-            basis = variance_basis(
-                metrics, VARIANCE_MODELS[self._trained_error_model]
-            )
-            return rndm_m_heteroscedastic_calculator(
-                model_preds, self.samples, self.Vt_hat, basis, seed=seed
-            )
-        return rndm_m_random_calculator(
-            model_preds, self.samples, self.Vt_hat, seed=seed
+            basis = variance_basis(metrics, terms)
+        else:
+            # Homoscedastic: constant-only variance basis.
+            basis = np.ones((model_preds.shape[0], 1))
+        return rndm_m_heteroscedastic_calculator(
+            model_preds, self.samples, self.Vt_hat, basis, seed=seed
         )
 
     def get_weights(self, summary=True):
@@ -409,7 +422,7 @@ class BayesianModelCombination:
             raise ValueError("Must call `orthogonalize()` and `train()` before getting weights.")
 
         # The first k columns are the PC coefficients; the remaining
-        # columns are error-model parameters (one sigma for the
+        # columns are variance parameters (a single sigma^2 for the
         # homoscedastic model, several for heteroscedastic models).
         betas = self.samples[:, : self.Vt_hat.shape[0]]
         n_models = self.Vt_hat.shape[1]

@@ -186,7 +186,12 @@ two per-point metrics:
   point \(i\) — grows where the models disagree.
 
 Both metrics are min-max normalized with the *training* values, so
-extrapolated points can exceed 1. The available error models are:
+extrapolated points can exceed 1. Every error model is parametrized on the
+variance (\(\sigma^2\)) scale and shares the single likelihood
+\(y_i \sim \mathcal{N}(X_i \cdot b,\, \sigma_i^2)\); the homoscedastic model is
+simply the special case whose variance basis is the constant term alone, so
+it is trained with the same sampler rather than a separate one. The
+available error models are:
 
 | `error_model` | Variance \(\sigma_i^2\) |
 | --- | --- |
@@ -230,6 +235,23 @@ scales. All tuning knobs can be overridden through `training_options`
 (`proposal_scales`, `init_params`, `prior_spec`, `adapt_proposal`,
 `target_acceptance`). Check `bmc.mh_acceptance_rate_` after training; if it
 is far from ~25%, increase `burn` or set `proposal_scales` manually.
+
+### Reproducibility
+
+All pybmc randomness — MCMC training and posterior-predictive draws — is
+driven by a single seeded package-wide generator (`pybmc.DEFAULT_SEED`), so a
+fresh session that performs the same sequence of calls reproduces end to end.
+`predict()`/`evaluate()` additionally default to a fixed per-call seed so
+repeated calls return identical draws. To re-seed the shared generator
+mid-session, or to pin an individual training run, use:
+
+```python
+import pybmc
+
+pybmc.set_seed(12345)                              # re-seed the shared stream
+bmc.train(training_options={"seed": 42, ...})      # pin one training run
+rndm_m, *_ = bmc.predict("BE", seed=None)          # draw from the shared stream
+```
 
 !!! note "Simplex constraint"
     Heteroscedastic error models currently require the unconstrained weight

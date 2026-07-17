@@ -63,7 +63,7 @@ class TestErrorModelRegistry(unittest.TestCase):
             required_metrics("bogus")
 
     def test_variance_parameter_names(self):
-        self.assertEqual(variance_parameter_names("homoscedastic"), ["sigma"])
+        self.assertEqual(variance_parameter_names("homoscedastic"), ["sigma^2"])
         self.assertEqual(
             variance_parameter_names("hetero_model_var_quad"),
             ["alpha", "beta_model_var^1", "beta_model_var^2"],
@@ -159,6 +159,21 @@ class TestHeteroscedasticSampler(unittest.TestCase):
                 self.y, self.X, self.basis, iterations=10, burn=0,
                 proposal_scales=[0.1],  # wrong length
             )
+        negative_basis = self.basis.copy()
+        negative_basis[:, 1] -= 1.0  # negative entries break positivity
+        with self.assertRaises(ValueError):
+            gibbs_sampler_heteroscedastic(
+                self.y, self.X, negative_basis, iterations=10, burn=0
+            )
+
+    def test_sampler_seed_reproducible(self):
+        s1, _ = gibbs_sampler_heteroscedastic(
+            self.y, self.X, self.basis, iterations=50, burn=20, seed=11
+        )
+        s2, _ = gibbs_sampler_heteroscedastic(
+            self.y, self.X, self.basis, iterations=50, burn=20, seed=11
+        )
+        np.testing.assert_array_equal(s1, s2)
 
 
 class TestBMCErrorModelInit(unittest.TestCase):
@@ -309,7 +324,7 @@ class TestBMCHeteroscedasticTraining(unittest.TestCase):
         bmc.train(
             training_options={"iterations": 200, "error_model": "homoscedastic"}
         )
-        self.assertEqual(bmc.samples.shape, (200, 3))  # 2 betas + sigma
+        self.assertEqual(bmc.samples.shape, (200, 3))  # 2 betas + sigma^2
         rndm_m, *_ = bmc.predict("target")
         self.assertEqual(rndm_m.shape[1], len(self.df))
 

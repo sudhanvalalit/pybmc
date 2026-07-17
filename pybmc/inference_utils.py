@@ -1,69 +1,61 @@
 import numpy as np
-from scipy import stats
 
 from .error_models import VARIANCE_FLOOR
+from .rng import get_rng
 
 
-def gibbs_sampler(y, X, iterations, prior_info):
+def gibbs_sampler(y, X, iterations, prior_info=None, burn=5000, seed=None):
     """
-    Performs Gibbs sampling for Bayesian linear regression.
+    Gibbs sampler for the homoscedastic (constant-variance) model.
+
+    The homoscedastic model is the constant-only special case of the
+    heteroscedastic likelihood (``sigma_i^2 = sigma^2`` for every point),
+    so this is a thin wrapper around `gibbs_sampler_heteroscedastic`
+    with a constant-only variance basis. There is no separate
+    homoscedastic likelihood implementation.
 
     Args:
         y (numpy.ndarray): Response vector (centered).
         X (numpy.ndarray): Design matrix.
-        iterations (int): Number of sampling iterations.
-        prior_info (tuple[numpy.ndarray, numpy.ndarray, float, float]): Prior parameters:
-            - `b_mean_prior` (numpy.ndarray): Prior mean for coefficients.
-            - `b_mean_cov` (numpy.ndarray): Prior covariance matrix.
-            - `nu0` (float): Prior degrees of freedom for variance.
-            - `sigma20` (float): Prior variance.
+        iterations (int): Number of retained posterior samples.
+        prior_info (dict, optional): Optional priors with keys
+            ``'b_mean_prior'``, ``'b_mean_cov'`` (Gaussian prior on the
+            coefficients) and ``'prior_spec'`` (Gamma ``(shape, scale)``
+            prior on ``sigma^2``). See `gibbs_sampler_heteroscedastic`.
+        burn (int, optional): Burn-in iterations (default: 5000).
+        seed (int | numpy.random.Generator | None, optional): Seed for
+            the sampler. None (default) draws from the shared
+            package-wide generator (see :mod:`pybmc.rng`).
 
     Returns:
-        numpy.ndarray: Posterior samples `[beta, sigma]`.
+        numpy.ndarray: Posterior samples ``[beta_1..beta_k, sigma^2]``.
     """
-    b_mean_prior, b_mean_cov, nu0, sigma20 = prior_info
-    b_mean_cov_inv = np.linalg.inv(b_mean_cov)
-    n = len(y)
-
-    X_T_X = X.T.dot(X)
-    X_T_X_inv = np.linalg.inv(X_T_X)
-
-    b_data = X_T_X_inv.dot(X.T).dot(y)
-    supermodel = X.dot(b_data)
-    residuals = y - supermodel
-    sigma2 = np.sum(residuals**2) / len(residuals)
-    cov_matrix = sigma2 * X_T_X_inv
-
-    samples = []
-
-    # Initialize sigma2 with a small positive value to avoid division by zero
-    sigma2 = max(sigma2, 1e-6)
-
-    for i in range(iterations):
-        # Regularize the covariance matrix to ensure it is positive definite
-        cov_matrix = np.linalg.inv(X_T_X / sigma2 + b_mean_cov_inv + np.eye(X_T_X.shape[0]) * 1e-6)
-        mean_vector = cov_matrix.dot(
-            b_mean_cov_inv.dot(b_mean_prior) + X.T.dot(y) / sigma2
-        )
-        b_current = np.random.multivariate_normal(mean_vector, cov_matrix)
-
-        # Sample from the conditional posterior of sigma2 given bs and data
-        supermodel = X.dot(b_current)
-        residuals = y - supermodel
-        shape_post = (nu0 + n) / 2.0
-        scale_post = (nu0 * sigma20 + np.sum(residuals**2)) / 2.0
-        sigma2 = max(1 / np.random.gamma(shape_post, 1 / scale_post), 1e-6)
-
-        samples.append(np.append(b_current, np.sqrt(sigma2)))
-
-    return np.array(samples)
+    prior_info = prior_info or {}
+    variance_basis = np.ones((len(y), 1))
+    samples, _ = gibbs_sampler_heteroscedastic(
+        y,
+        X,
+        variance_basis,
+        iterations,
+        burn=burn,
+        prior_spec=prior_info.get("prior_spec"),
+        b_mean_prior=prior_info.get("b_mean_prior"),
+        b_mean_cov=prior_info.get("b_mean_cov"),
+        seed=seed,
+    )
+    return samples
 
 
 def gibbs_sampler_simplex(
-    y, X, Vt_hat, S_hat, iterations, prior_info, burn=10000, stepsize=0.001
+    y, X, Vt_hat, S_hat, iterations, prior_info, burn=10000, stepsize=0.001,
+    seed=None,
 ):
     """
     Performs Gibbs sampling with simplex constraints on model weights.
+
+    The likelihood is the same homoscedastic Gaussian model used by the
+    unconstrained sampler (``y_i ~ N(X_i . b, sigma^2)``); only the
+    weight constraint differs.
 
     Args:
         y (numpy.ndarray): Centered response vector.
@@ -74,10 +66,15 @@ def gibbs_sampler_simplex(
         prior_info (list[float]): `[nu0, sigma20]` - prior parameters for variance.
         burn (int, optional): Burn-in iterations (default: 10000).
         stepsize (float, optional): Proposal step size (default: 0.001).
+        seed (int | numpy.random.Generator | None, optional): Seed for
+            the sampler. None (default) draws from the shared
+            package-wide generator (see :mod:`pybmc.rng`).
 
     Returns:
-        numpy.ndarray: Posterior samples `[beta, sigma]`.
+        numpy.ndarray: Posterior samples ``[beta_1..beta_k, sigma^2]``.
     """
+    rng = get_rng(seed)
+
     bias0 = np.full(len(Vt_hat.T), 1 / len(Vt_hat.T))
     nu0, sigma20 = prior_info
     cov_matrix_step = np.diag(S_hat**2 * stepsize**2)
@@ -85,8 +82,8 @@ def gibbs_sampler_simplex(
     b_current = np.full(len(X.T), 0)
     supermodel_current = X.dot(b_current)
     residuals_current = y - supermodel_current
-    log_likelihood_current = -np.sum(residuals_current**2)
-    sigma2 = -log_likelihood_current / len(residuals_current)
+    ssr_current = np.sum(residuals_current**2)
+    sigma2 = ssr_current / len(residuals_current)
     samples = []
     acceptance = 0
 
@@ -96,52 +93,34 @@ def gibbs_sampler_simplex(
     if stepsize <= 0:
         raise ValueError("Stepsize must be positive.")
 
-    # Burn-in phase
-    for i in range(burn):
-        b_proposed = np.random.multivariate_normal(b_current, cov_matrix_step)
+    for i in range(burn + iterations):
+        b_proposed = rng.multivariate_normal(b_current, cov_matrix_step)
         omegas_proposed = np.dot(b_proposed, Vt_hat) + bias0
 
         # Skip proposals with negative weights
         if not np.any(omegas_proposed < 0):
             supermodel_proposed = X.dot(b_proposed)
             residuals_proposed = y - supermodel_proposed
-            log_likelihood_proposed = -np.sum(residuals_proposed**2)
+            ssr_proposed = np.sum(residuals_proposed**2)
+            # Gaussian likelihood ratio at fixed sigma^2:
+            # exp(-(SSR' - SSR) / (2 sigma^2)).
             acceptance_prob = min(
                 1,
-                np.exp((log_likelihood_proposed - log_likelihood_current) / sigma2),
+                np.exp((ssr_current - ssr_proposed) / (2 * sigma2)),
             )
-            if np.random.uniform() < acceptance_prob:
+            if rng.uniform() < acceptance_prob:
                 b_current = np.copy(b_proposed)
-                log_likelihood_current = log_likelihood_proposed
+                ssr_current = ssr_proposed
+                if i >= burn:
+                    acceptance += 1
 
-        # Sample variance
+        # Sample sigma^2 from its inverse-gamma full conditional
+        # (positive by construction).
         shape_post = (nu0 + n) / 2.0
-        scale_post = (nu0 * sigma20 - log_likelihood_current) / 2.0
-        sigma2 = 1 / np.random.gamma(shape_post, 1 / scale_post)
-
-    # Sampling phase
-    for i in range(iterations):
-        b_proposed = np.random.multivariate_normal(b_current, cov_matrix_step)
-        omegas_proposed = np.dot(b_proposed, Vt_hat) + bias0
-
-        if not np.any(omegas_proposed < 0):
-            supermodel_proposed = X.dot(b_proposed)
-            residuals_proposed = y - supermodel_proposed
-            log_likelihood_proposed = -np.sum(residuals_proposed**2)
-            acceptance_prob = min(
-                1,
-                np.exp((log_likelihood_proposed - log_likelihood_current) / sigma2),
-            )
-            if np.random.uniform() < acceptance_prob:
-                b_current = np.copy(b_proposed)
-                log_likelihood_current = log_likelihood_proposed
-                acceptance += 1
-
-        # Sample variance
-        shape_post = (nu0 + n) / 2.0
-        scale_post = (nu0 * sigma20 - log_likelihood_current) / 2.0
-        sigma2 = 1 / np.random.gamma(shape_post, 1 / scale_post)
-        samples.append(np.append(b_current, np.sqrt(sigma2)))
+        scale_post = (nu0 * sigma20 + ssr_current) / 2.0
+        sigma2 = 1 / rng.gamma(shape_post, 1 / scale_post)
+        if i >= burn:
+            samples.append(np.append(b_current, sigma2))
 
     return np.array(samples)
 
@@ -159,9 +138,10 @@ def gibbs_sampler_heteroscedastic(
     b_mean_cov=None,
     adapt_proposal=True,
     target_acceptance=0.25,
+    seed=None,
 ):
     """
-    Gibbs-within-Metropolis sampler for heteroscedastic error models.
+    Gibbs-within-Metropolis sampler for the shared error-model likelihood.
 
     The regression model is ``y_i ~ N(X_i . b, sigma_i^2)`` with a
     per-point variance that is linear in basis functions of the
@@ -169,18 +149,28 @@ def gibbs_sampler_heteroscedastic(
 
         ``sigma_i^2 = variance_basis[i] . theta``
 
+    The homoscedastic model is the special case where the basis is a
+    single column of ones, so ``theta = [sigma^2]`` is the constant
+    variance. All error models share this one likelihood.
+
     The coefficients ``b`` are updated with a conjugate (weighted
     least-squares) Gibbs step; the variance parameters ``theta`` with a
     positivity-constrained Gaussian random-walk Metropolis-Hastings step
-    under Gamma priors.
+    under Gamma priors. Because ``theta`` is kept strictly positive by
+    the MH step and ``variance_basis`` is validated to be non-negative
+    with a leading column of ones, every per-point variance satisfies
+    ``sigma_i^2 >= theta_1 > 0`` by construction — no variance flooring
+    is applied during sampling. The only floor is on the *initial*
+    constant term, which is estimated from the data residuals and could
+    otherwise be exactly zero for a perfectly fitting model.
 
     Args:
         y (numpy.ndarray): Centered response vector, shape ``(n,)``.
         X (numpy.ndarray): Design matrix (principal components), shape
             ``(n, k)``.
         variance_basis (numpy.ndarray): Variance design matrix ``phi``
-            with a leading column of ones, shape ``(n, p)``. See
-            :func:`pybmc.error_models.variance_basis`.
+            with a leading column of ones and no negative entries, shape
+            ``(n, p)``. See :func:`pybmc.error_models.variance_basis`.
         iterations (int): Number of retained posterior samples.
         burn (int, optional): Burn-in iterations discarded before
             retention (default: 5000).
@@ -188,9 +178,9 @@ def gibbs_sampler_heteroscedastic(
             random-walk proposal covariance for ``theta`` (length p).
             Defaults to ``[1e-2, 1e-3, ..., 1e-3]``.
         init_params (list[float], optional): Initial values for the
-            non-constant entries of ``theta`` (length p - 1). The
-            constant term starts at the OLS residual variance. Defaults
-            to 0.01 for every term.
+            non-constant entries of ``theta`` (length p - 1, strictly
+            positive). The constant term starts at the OLS residual
+            variance. Defaults to 0.01 for every term.
         prior_spec (list[tuple[float, float]], optional): Gamma prior
             ``(shape, scale)`` for each entry of ``theta`` (length p).
             Defaults to ``(2, 10)`` for every parameter.
@@ -205,6 +195,9 @@ def gibbs_sampler_heteroscedastic(
             preserves detailed balance for the retained samples.
         target_acceptance (float, optional): Acceptance rate targeted by
             the burn-in adaptation (default: 0.25).
+        seed (int | numpy.random.Generator | None, optional): Seed for
+            the sampler. None (default) draws from the shared
+            package-wide generator (see :mod:`pybmc.rng`).
 
     Returns:
         tuple[numpy.ndarray, float]:
@@ -216,6 +209,8 @@ def gibbs_sampler_heteroscedastic(
     if burn < 0:
         raise ValueError("Burn-in iterations must be non-negative.")
 
+    rng = get_rng(seed)
+
     n_points, n_betas = X.shape
     n_params = variance_basis.shape[1]
 
@@ -223,6 +218,11 @@ def gibbs_sampler_heteroscedastic(
         raise ValueError(
             "The first column of 'variance_basis' must be ones "
             "(the constant variance term)."
+        )
+    if np.any(variance_basis < 0):
+        raise ValueError(
+            "'variance_basis' must be non-negative so that positive "
+            "variance parameters guarantee positive variances."
         )
 
     if proposal_scales is None:
@@ -241,7 +241,20 @@ def gibbs_sampler_heteroscedastic(
             f"'prior_spec' must have length {n_params} "
             f"(got {len(prior_spec)})."
         )
-    priors = [stats.gamma(a=a, scale=scale) for a, scale in prior_spec]
+    prior_shapes = np.array([shape for shape, _ in prior_spec], dtype=float)
+    prior_scales = np.array([scale for _, scale in prior_spec], dtype=float)
+
+    def log_likelihood(residuals, sigma2):
+        return -0.5 * float(
+            np.sum(np.log(2.0 * np.pi * sigma2) + residuals**2 / sigma2)
+        )
+
+    def log_prior(theta):
+        # Gamma log-density without the normalization constant, which
+        # cancels in the Metropolis-Hastings ratio.
+        return float(
+            np.sum((prior_shapes - 1.0) * np.log(theta) - theta / prior_scales)
+        )
 
     if b_mean_prior is None:
         b_mean_prior = np.zeros(n_betas)
@@ -257,6 +270,8 @@ def gibbs_sampler_heteroscedastic(
             f"'init_params' must have length {n_params - 1} "
             f"(got {len(init_params)})."
         )
+    if np.any(np.asarray(init_params, dtype=float) <= 0):
+        raise ValueError("'init_params' must be strictly positive.")
     theta_current = np.concatenate(
         [[max(np.var(y - X @ b_current), VARIANCE_FLOOR)], init_params]
     )
@@ -274,7 +289,6 @@ def gibbs_sampler_heteroscedastic(
     for i in range(burn + iterations):
         # --- Gibbs step: b | theta (weighted least squares) ---
         sigma2 = variance_basis @ theta_current
-        sigma2[sigma2 <= VARIANCE_FLOOR] = VARIANCE_FLOOR
         Xw = X / sigma2[:, None]
         b_post_cov = np.linalg.inv(
             X.T @ Xw + b_mean_cov_inv + np.eye(n_betas) * 1e-6
@@ -282,38 +296,25 @@ def gibbs_sampler_heteroscedastic(
         b_post_mean = b_post_cov @ (
             Xw.T @ y + b_mean_cov_inv @ b_mean_prior
         )
-        b_current = np.random.multivariate_normal(b_post_mean, b_post_cov)
+        b_current = rng.multivariate_normal(b_post_mean, b_post_cov)
 
         # --- MH step: theta | b (positivity-constrained random walk) ---
         residuals = y - X @ b_current
         theta_proposed = np.atleast_1d(
-            np.random.multivariate_normal(
+            rng.multivariate_normal(
                 theta_current, proposal_cov * proposal_scale_factor**2
             )
         )
         if np.all(theta_proposed > 0):
-            scale_current = np.sqrt(
-                np.maximum(variance_basis @ theta_current, VARIANCE_FLOOR)
+            sigma2_proposed = variance_basis @ theta_proposed
+            log_ratio = (
+                log_likelihood(residuals, sigma2_proposed)
+                + log_prior(theta_proposed)
+            ) - (
+                log_likelihood(residuals, sigma2)
+                + log_prior(theta_current)
             )
-            scale_proposed = np.sqrt(
-                np.maximum(variance_basis @ theta_proposed, VARIANCE_FLOOR)
-            )
-            log_lik_current = np.sum(
-                stats.norm.logpdf(residuals, scale=scale_current)
-            )
-            log_lik_proposed = np.sum(
-                stats.norm.logpdf(residuals, scale=scale_proposed)
-            )
-            log_prior_current = sum(
-                p.logpdf(v) for p, v in zip(priors, theta_current)
-            )
-            log_prior_proposed = sum(
-                p.logpdf(v) for p, v in zip(priors, theta_proposed)
-            )
-            log_ratio = (log_lik_proposed + log_prior_proposed) - (
-                log_lik_current + log_prior_current
-            )
-            if np.log(np.random.uniform()) < log_ratio:
+            if np.log(rng.uniform()) < log_ratio:
                 theta_current = theta_proposed
                 if i >= burn:
                     accept_count += 1

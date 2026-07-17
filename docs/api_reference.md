@@ -11,3 +11,5 @@ This API reference provides detailed documentation for the classes and functions
 ::: pybmc.sampling_utils
 
 ::: pybmc.error_models
+
+::: pybmc.rng
