@@ -9,7 +9,7 @@ authors = [
   "Pablo Giuliani",
   "An Le"
 ]
-license = "GPL-3.0"
+license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/ascsn/pybmc"
 repository = "https://github.com/ascsn/pybmc"
