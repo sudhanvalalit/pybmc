@@ -1,12 +1,14 @@
 [tool.poetry]
 name = "pybmc"
-version = "0.2.4"
+version = "0.4.1"
 description = "A package for Bayesian model combination"
 authors = [
   "Kyle Godbey <pybmc@ascsn.net>",
   "Pranav Agarwal",
   "Troy Dasher",
   "Pablo Giuliani",
+  "Bailey Knight",
+  "Sudhanva Lalit",
   "An Le"
 ]
 license = "MIT"
